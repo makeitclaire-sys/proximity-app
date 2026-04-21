@@ -6,7 +6,7 @@ import {
   ChevronRight, Music, Film, BookOpen, Plane, Pencil
 } from 'lucide-react';
 
-export default function ProximityAppDemo() {
+export default function App() {
   const [screen, setScreen] = useState('welcome');
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [mode, setMode] = useState('social');
