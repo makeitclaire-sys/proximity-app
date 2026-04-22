@@ -3,10 +3,10 @@ import {
   ArrowLeft, Settings, X, Check, Users, MessageSquare,
   Sparkles, EyeOff, Briefcase, Heart, Bell, Clock,
   CheckCircle2, MapPin, UserPlus, Send, Camera, User,
-  ChevronRight, Music, Film, BookOpen, Plane, Pencil
+  ChevronRight, Pencil, Phone, Shield, HandMetal, Zap
 } from 'lucide-react';
 
-export default function App() {
+export default function ProximityAppDemo() {
   const [screen, setScreen] = useState('welcome');
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [mode, setMode] = useState('social');
@@ -14,8 +14,15 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [radius, setRadius] = useState('venue');
   const [visible, setVisible] = useState(true);
-  const [profileMode, setProfileMode] = useState('social'); // which profile variant being edited
+  const [profileMode, setProfileMode] = useState('social');
   const [photoUploaded, setPhotoUploaded] = useState(false);
+
+  // Signup flow state
+  const [signupStep, setSignupStep] = useState('phone'); // phone, code, username, birthday, selfie, pick-mode, basics, done
+  const [signupMode, setSignupMode] = useState(null); // 'social' | 'professional' — which profile they're setting up
+  const [selfieState, setSelfieState] = useState('intro'); // intro, scanning, verified
+  const [hasSocialProfile, setHasSocialProfile] = useState(false);
+  const [hasProProfile, setHasProProfile] = useState(false);
 
   // ============ DATA ============
 
@@ -24,15 +31,19 @@ export default function App() {
       id: 1, name: 'Maya R.', age: 28, mode: 'social',
       distance: 'in this room', distanceCategory: 'room',
       accent: '#FF2D87', initials: 'MR',
+      status: 'New in Berlin',
+      affiliation: 'Figma \u00b7 ex-NYC',
       bio: 'Designer, ex-NYC, figuring out Berlin.',
       talkAbout: ['bookbinding', 'longform podcasts', 'Lisbon last May'],
       starters: ['Coffee or matcha?', 'Last great book you read?', 'Best neighborhood you\u2019ve lived in?'],
       dontTalk: ['my ex', 'politics']
     },
     {
-      id: 2, name: 'Daniel K.', age: 34, mode: 'work',
+      id: 2, name: 'Daniel K.', age: 34, mode: 'professional',
       distance: 'in this venue', distanceCategory: 'venue',
       accent: '#4F46E5', initials: 'DK',
+      status: 'Founder, seed-stage',
+      affiliation: 'Linear alum \u00b7 building dev tools',
       bio: 'Building a dev tools startup. Looking for design feedback.',
       talkAbout: ['dev tooling', 'B2B pricing', 'running a tiny team'],
       starters: ['What are you building?', 'Favorite engineering blog?', 'Mac or Linux?'],
@@ -42,15 +53,19 @@ export default function App() {
       id: 3, name: 'Priya S.', age: 26, mode: 'social',
       distance: '12m away', distanceCategory: 'venue',
       accent: '#FF8A00', initials: 'PS',
+      status: 'PhD, new in town',
+      affiliation: 'Humboldt University',
       bio: 'PhD candidate in cognitive science. New in town.',
       talkAbout: ['weird brain stuff', 'vintage cameras', 'good dosa spots'],
       starters: ['Reading anything good?', 'Favorite museum here?', 'Coffee shop recs?'],
       dontTalk: ['academia gossip']
     },
     {
-      id: 4, name: 'Marco T.', age: 31, mode: 'work',
+      id: 4, name: 'Marco T.', age: 31, mode: 'professional',
       distance: 'in this venue', distanceCategory: 'venue',
       accent: '#A855F7', initials: 'MT',
+      status: 'Product lead',
+      affiliation: 'N26 \u00b7 fintech',
       bio: 'Product lead at a fintech. Here for the AI track.',
       talkAbout: ['LLM evals', 'PM career paths', 'Italy'],
       starters: ['What talk are you most excited for?', 'Where\u2019d you fly in from?', 'Specialty coffee?'],
@@ -60,15 +75,19 @@ export default function App() {
       id: 5, name: 'Aisha O.', age: 29, mode: 'social',
       distance: 'in this room', distanceCategory: 'room',
       accent: '#06D6A0', initials: 'AO',
+      status: 'Writing my first novel',
+      affiliation: 'freelance journalist',
       bio: 'Writing my first novel. Here for the quiet wifi.',
       talkAbout: ['speculative fiction', 'tarot', 'cold-water swimming'],
       starters: ['What are you working on?', 'Last film that wrecked you?', 'Tea order?'],
       dontTalk: ['publishing industry']
     },
     {
-      id: 6, name: 'Jonas W.', age: 36, mode: 'work',
+      id: 6, name: 'Jonas W.', age: 36, mode: 'professional',
       distance: 'nearby', distanceCategory: 'area',
       accent: '#F43F5E', initials: 'JW',
+      status: 'CTO, hiring',
+      affiliation: 'Climeworks',
       bio: 'CTO at a climate hardware startup. Always hiring.',
       talkAbout: ['carbon removal', 'hardware vs. software', 'hiring'],
       starters: ['What problem are you obsessed with?', 'How big is your team?', 'Berlin or SF?'],
@@ -100,9 +119,14 @@ export default function App() {
   const recentActivity = activity.filter(a => a.when === 'today').length;
 
   const visiblePeople = mode === 'off' ? [] : allPeople.filter(p => p.mode === mode);
-  const accentColor = mode === 'work' ? '#4F46E5' : '#FF2D87';
+  const accentColor = mode === 'professional' ? '#4F46E5' : '#FF2D87';
 
-  // ============ COMPONENTS ============
+  // Mode-specific action button labels
+  const getActions = (m) => m === 'professional'
+    ? { primary: 'Let\u2019s connect', secondary: 'Tap me in', tertiary: 'Not interested', primaryIcon: HandMetal, secondaryIcon: Zap }
+    : { primary: 'Come say hi', secondary: 'Let\u2019s chat', tertiary: 'Not interested', primaryIcon: Sparkles, secondaryIcon: MessageSquare };
+
+  // ============ SCREENS ============
 
   const WelcomeScreen = () => (
     <div className="h-full flex flex-col bg-cream px-7 py-10 relative overflow-hidden">
@@ -130,11 +154,11 @@ export default function App() {
 
         <div className="space-y-3">
           <button
-            onClick={() => setScreen('setup')}
+            onClick={() => { setSignupStep('phone'); setScreen('signup'); }}
             className="w-full py-4 rounded-full font-body font-medium text-white text-[15px] transition-transform active:scale-[0.98]"
             style={{ backgroundColor: '#12101C', boxShadow: '0 12px 30px -10px rgba(18,16,28,0.5)' }}
           >
-            Set up your profile
+            Create your account
           </button>
           <button
             onClick={() => setScreen('discover')}
@@ -147,65 +171,516 @@ export default function App() {
     </div>
   );
 
-  const SetupScreen = () => {
-    const questions = [
-      { label: 'Three things to talk to me about', placeholder: 'e.g. surfing', icon: Sparkles, examples: ['surfing', 'horror movies', 'Tokyo travel tips'], iconColor: '#FF2D87' },
-      { label: 'Three conversation starters', placeholder: 'e.g. What brought you here?', icon: MessageSquare, examples: ['What brought you here?', 'Best meal this week?', 'What are you working on?'], iconColor: '#4F46E5' },
-      { label: 'Three things NOT to talk about', placeholder: 'e.g. work drama', icon: EyeOff, examples: ['work drama', 'my dating life', ''], iconColor: '#A8A3B8' }
-    ];
+  // =========================================================
+  // SIGNUP FLOW — clean, multi-step, like top social platforms
+  // =========================================================
+
+  const SignupScreen = () => {
+    const stepOrder = ['phone', 'code', 'username', 'birthday', 'selfie', 'pick-mode', 'basics', 'done'];
+    const stepIndex = stepOrder.indexOf(signupStep);
+    const totalSteps = stepOrder.length - 1; // exclude 'done'
+
+    const goNext = () => {
+      const next = stepOrder[stepIndex + 1];
+      if (next) setSignupStep(next);
+    };
+    const goBack = () => {
+      if (stepIndex === 0) { setScreen('welcome'); return; }
+      setSignupStep(stepOrder[stepIndex - 1]);
+    };
+
+    const stepAccent = signupMode === 'professional' ? '#4F46E5' : '#FF2D87';
 
     return (
       <div className="h-full flex flex-col bg-cream">
-        <div className="px-6 pt-12 pb-4 flex items-center justify-between">
-          <button onClick={() => setScreen('welcome')} className="text-ink">
-            <ArrowLeft size={20} />
-          </button>
-          <div className="font-body text-xs text-muted tracking-wider uppercase">Step 1 of 1</div>
-          <div className="w-5" />
-        </div>
+        {/* Top bar with back + progress */}
+        {signupStep !== 'done' && (
+          <div className="px-6 pt-12 pb-4 flex items-center gap-3">
+            <button onClick={goBack} className="text-ink flex-shrink-0">
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex-1 h-1 bg-warm rounded-full overflow-hidden">
+              <div className="h-full transition-all duration-500 ease-out rounded-full"
+                   style={{
+                     width: `${((stepIndex + 1) / totalSteps) * 100}%`,
+                     backgroundColor: stepAccent
+                   }} />
+            </div>
+            <div className="font-body text-[11px] text-faint tracking-wider w-10 text-right">
+              {stepIndex + 1}/{totalSteps}
+            </div>
+          </div>
+        )}
 
-        <div className="px-6 pb-2">
-          <h2 className="font-display text-[28px] leading-tight text-ink">Your profile,<br/><span className="italic">in nine answers.</span></h2>
-          <p className="font-body text-[13px] text-muted mt-2">Separate answers for Work and Social mode.</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 pt-4 pb-32 space-y-6">
-          {questions.map((q, i) => {
-            const Icon = q.icon;
-            return (
-              <div key={i} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Icon size={14} style={{ color: q.iconColor }} />
-                  <div className="font-body text-[12px] uppercase tracking-wider text-ink">{q.label}</div>
-                </div>
-                <div className="space-y-2">
-                  {[0, 1, 2].map(idx => (
-                    <input
-                      key={idx}
-                      type="text"
-                      defaultValue={q.examples[idx]}
-                      placeholder={q.placeholder}
-                      className="w-full px-4 py-3 bg-surface rounded-2xl font-display italic text-[15px] text-ink placeholder:text-faint placeholder:not-italic placeholder:font-body focus:outline-none border border-warm focus:border-ink transition-colors"
-                    />
-                  ))}
+        <div className="flex-1 overflow-y-auto px-6 pb-8">
+          {signupStep === 'phone' && (
+            <div className="pt-6 space-y-6">
+              <div>
+                <h2 className="font-display text-[32px] leading-tight text-ink">
+                  What\u2019s your number?
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+                  We\u2019ll text you a code. Your number is never shown to other users.
+                </p>
+              </div>
+              <div className="bg-surface rounded-2xl border border-warm overflow-hidden">
+                <div className="flex items-center">
+                  <div className="px-4 py-4 border-r border-warm font-body text-[15px] text-ink">
+                    +1
+                  </div>
+                  <input
+                    type="tel"
+                    defaultValue="555 012 3847"
+                    className="flex-1 px-4 py-4 font-body text-[17px] text-ink bg-transparent focus:outline-none"
+                  />
                 </div>
               </div>
-            );
-          })}
+              <button
+                onClick={goNext}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+                style={{ backgroundColor: '#12101C' }}
+              >
+                Send code
+              </button>
+              <p className="font-body text-[11px] text-faint text-center leading-relaxed">
+                By continuing, you agree to our Terms and Privacy Policy. Standard message rates may apply.
+              </p>
+            </div>
+          )}
+
+          {signupStep === 'code' && (
+            <div className="pt-6 space-y-6">
+              <div>
+                <h2 className="font-display text-[32px] leading-tight text-ink">
+                  Enter the code
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2">
+                  Sent to +1 (555) 012\u20113847
+                </p>
+              </div>
+              <div className="flex gap-2 justify-center pt-2">
+                {['4', '7', '2', '9', '0', '1'].map((digit, i) => (
+                  <div key={i}
+                       className="w-11 h-14 rounded-xl bg-surface border-2 flex items-center justify-center font-display text-[24px] text-ink"
+                       style={{ borderColor: i < 6 ? '#12101C' : '#EEEBF2' }}>
+                    {digit}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={goNext}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+                style={{ backgroundColor: '#12101C' }}
+              >
+                Continue
+              </button>
+              <button className="w-full py-2 font-body text-[13px] text-muted underline-offset-4 hover:underline">
+                Resend code
+              </button>
+            </div>
+          )}
+
+          {signupStep === 'username' && (
+            <div className="pt-6 space-y-6">
+              <div>
+                <h2 className="font-display text-[32px] leading-tight text-ink">
+                  Pick a username
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+                  This is how other people will find you. You can change it once.
+                </p>
+              </div>
+              <div className="bg-surface rounded-2xl border border-warm overflow-hidden">
+                <div className="flex items-center">
+                  <div className="px-4 py-4 font-display italic text-[17px] text-faint">
+                    @
+                  </div>
+                  <input
+                    type="text"
+                    defaultValue="morgan.l"
+                    className="flex-1 px-1 py-4 font-body text-[17px] text-ink bg-transparent focus:outline-none"
+                  />
+                  <div className="pr-4">
+                    <Check size={18} style={{ color: '#06D6A0' }} strokeWidth={2.5} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Check size={12} style={{ color: '#06D6A0' }} strokeWidth={2.5} />
+                <span className="font-body text-[12px] text-muted">Available</span>
+              </div>
+              <button
+                onClick={goNext}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+                style={{ backgroundColor: '#12101C' }}
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {signupStep === 'birthday' && (
+            <div className="pt-6 space-y-6">
+              <div>
+                <h2 className="font-display text-[32px] leading-tight text-ink">
+                  When\u2019s your birthday?
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+                  You must be 18 or older to use Proximity. Your age shows; your exact date doesn\u2019t unless you want.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {[
+                  { label: 'Month', value: 'March' },
+                  { label: 'Day', value: '14' },
+                  { label: 'Year', value: '1996' }
+                ].map((f, i) => (
+                  <div key={i} className="flex-1 bg-surface rounded-2xl border border-warm overflow-hidden">
+                    <div className="px-3 pt-2 font-body text-[10px] uppercase tracking-wider text-faint">
+                      {f.label}
+                    </div>
+                    <input
+                      type="text"
+                      defaultValue={f.value}
+                      className="w-full px-3 pb-3 font-body text-[15px] text-ink bg-transparent focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={goNext}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+                style={{ backgroundColor: '#12101C' }}
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {signupStep === 'selfie' && <SelfieVerifyStep onDone={goNext} />}
+
+          {signupStep === 'pick-mode' && (
+            <div className="pt-6 space-y-5">
+              <div>
+                <h2 className="font-display text-[32px] leading-tight text-ink">
+                  What are you here for?
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+                  Set up one profile now. You can add the other later from your account.
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => { setSignupMode('social'); goNext(); }}
+                  className="w-full bg-surface rounded-2xl p-5 border-2 text-left relative overflow-hidden hover:border-ink transition-colors active:scale-[0.99]"
+                  style={{ borderColor: signupMode === 'social' ? '#FF2D87' : '#EEEBF2' }}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                         style={{ backgroundColor: 'rgba(255, 45, 135, 0.12)' }}>
+                      <Heart size={22} style={{ color: '#FF2D87' }} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-display text-[20px] text-ink leading-tight">Social</div>
+                      <div className="font-body text-[13px] text-muted mt-1 leading-snug">
+                        Meet friends, travel buddies, the people at your caf\u00e9 or event.
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setSignupMode('professional'); goNext(); }}
+                  className="w-full bg-surface rounded-2xl p-5 border-2 text-left relative overflow-hidden hover:border-ink transition-colors active:scale-[0.99]"
+                  style={{ borderColor: signupMode === 'professional' ? '#4F46E5' : '#EEEBF2' }}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                         style={{ backgroundColor: 'rgba(79, 70, 229, 0.12)' }}>
+                      <Briefcase size={22} style={{ color: '#4F46E5' }} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-display text-[20px] text-ink leading-tight">Professional</div>
+                      <div className="font-body text-[13px] text-muted mt-1 leading-snug">
+                        Network at conferences, find collaborators, build your circle.
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {signupStep === 'basics' && signupMode && (
+            <div className="pt-6 space-y-5">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-3"
+                     style={{ backgroundColor: `${stepAccent}15` }}>
+                  {signupMode === 'professional' ? (
+                    <Briefcase size={11} style={{ color: stepAccent }} />
+                  ) : (
+                    <Heart size={11} style={{ color: stepAccent }} />
+                  )}
+                  <span className="font-body text-[11px] font-medium uppercase tracking-wider" style={{ color: stepAccent }}>
+                    {signupMode} profile
+                  </span>
+                </div>
+                <h2 className="font-display text-[30px] leading-tight text-ink">
+                  Tell us a little<br/>about yourself.
+                </h2>
+                <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+                  You can edit any of this later.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-1.5">Status</div>
+                  <input
+                    type="text"
+                    placeholder={signupMode === 'professional' ? 'e.g. Founder, seed-stage' : 'e.g. New in town'}
+                    defaultValue={signupMode === 'professional' ? 'Senior product designer' : 'Most at home at sunrise'}
+                    className="w-full px-4 py-3 bg-surface rounded-2xl font-body text-[15px] text-ink border border-warm focus:border-ink focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-1.5">
+                    {signupMode === 'professional' ? 'Where you work' : 'Notable affiliation'}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={signupMode === 'professional' ? 'Company, role' : 'School, team, community, church'}
+                    defaultValue={signupMode === 'professional' ? 'Series B dev tools startup' : 'Berlin \u00b7 ex-NYC'}
+                    className="w-full px-4 py-3 bg-surface rounded-2xl font-body text-[15px] text-ink border border-warm focus:border-ink focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="font-body text-[11px] uppercase tracking-wider text-ink">Bio</div>
+                    <div className="font-body text-[10px] text-faint">up to 160</div>
+                  </div>
+                  <textarea
+                    rows={3}
+                    placeholder="What should people know about you?"
+                    defaultValue={signupMode === 'professional'
+                      ? 'Leading design at a dev tools startup. Open to advising and the occasional coffee.'
+                      : 'Designer in Berlin, ex-NYC. Sunrise person, long walker, bad at small talk.'}
+                    maxLength={160}
+                    className="w-full px-4 py-3 bg-surface rounded-2xl font-body text-[14px] text-ink leading-relaxed border border-warm focus:border-ink focus:outline-none transition-colors resize-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (signupMode === 'social') setHasSocialProfile(true);
+                  if (signupMode === 'professional') setHasProProfile(true);
+                  goNext();
+                }}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px] mt-2"
+                style={{ backgroundColor: stepAccent, boxShadow: `0 10px 25px -8px ${stepAccent}aa` }}
+              >
+                Finish my {signupMode} profile
+              </button>
+            </div>
+          )}
+
+          {signupStep === 'done' && <SignupDoneStep />}
+        </div>
+      </div>
+    );
+  };
+
+  const SelfieVerifyStep = ({ onDone }) => {
+    return (
+      <div className="pt-4 space-y-5">
+        <div>
+          <h2 className="font-display text-[30px] leading-tight text-ink">
+            One quick selfie.
+          </h2>
+          <p className="font-body text-[13px] text-muted mt-2 leading-relaxed">
+            Everyone on Proximity is verified. It takes five seconds and stops bots and fake profiles in their tracks.
+          </p>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 px-6 pb-8 pt-4 bg-gradient-to-t from-cream via-cream to-transparent">
+        {selfieState === 'intro' && (
+          <>
+            <div className="relative aspect-square rounded-3xl overflow-hidden"
+                 style={{
+                   background: 'linear-gradient(145deg, #F4F1FF 0%, #FFE4F0 100%)',
+                   border: '1px dashed #CFC9D9'
+                 }}>
+              <div className="absolute inset-6 rounded-full border-2 border-dashed flex items-center justify-center"
+                   style={{ borderColor: '#CFC9D9' }}>
+                <User size={60} className="text-faint" strokeWidth={1} />
+              </div>
+              <div className="absolute top-4 left-4 right-4 flex items-center gap-1.5">
+                <Shield size={11} className="text-muted" />
+                <span className="font-body text-[10px] uppercase tracking-wider text-muted">
+                  Private \u00b7 never shown to others
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#06D6A0' }} />
+                <div className="font-body text-[13px] text-muted leading-relaxed">Confirms you\u2019re a real human</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#06D6A0' }} />
+                <div className="font-body text-[13px] text-muted leading-relaxed">Gets you a Verified badge on your profile</div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#06D6A0' }} />
+                <div className="font-body text-[13px] text-muted leading-relaxed">Never visible to other users, never sold</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelfieState('scanning')}
+              className="w-full py-4 rounded-full font-body font-medium text-white text-[15px] flex items-center justify-center gap-2"
+              style={{ backgroundColor: '#12101C' }}
+            >
+              <Camera size={16} />
+              Take selfie
+            </button>
+          </>
+        )}
+
+        {selfieState === 'scanning' && (
+          <>
+            <div className="relative aspect-square rounded-3xl overflow-hidden"
+                 style={{ background: 'linear-gradient(145deg, #2D2A3D, #18161F)' }}>
+              <div className="absolute inset-8 rounded-full border-2 flex items-center justify-center"
+                   style={{ borderColor: 'rgba(255, 45, 135, 0.6)' }}>
+                <div className="absolute inset-0 rounded-full animate-ping"
+                     style={{ border: '2px solid rgba(255, 45, 135, 0.4)' }} />
+                <User size={60} className="text-white opacity-40" strokeWidth={1} />
+              </div>
+              <div className="absolute bottom-5 left-0 right-0 flex items-center justify-center gap-2">
+                <div className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                        style={{ backgroundColor: '#FF2D87' }} />
+                  <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#FF2D87' }} />
+                </div>
+                <span className="font-body text-[12px] text-white">Analyzing\u2026</span>
+              </div>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => setSelfieState('verified')}
+                className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+                style={{ backgroundColor: '#12101C' }}
+              >
+                Simulate verify \u2014 tap
+              </button>
+            </div>
+          </>
+        )}
+
+        {selfieState === 'verified' && (
+          <>
+            <div className="relative aspect-square rounded-3xl overflow-hidden flex items-center justify-center"
+                 style={{ background: 'linear-gradient(145deg, rgba(6, 214, 160, 0.15), rgba(217, 246, 92, 0.2))' }}>
+              <div className="w-24 h-24 rounded-full flex items-center justify-center"
+                   style={{ backgroundColor: '#06D6A0', boxShadow: '0 16px 40px -10px rgba(6, 214, 160, 0.6)' }}>
+                <Check size={44} className="text-white" strokeWidth={3} />
+              </div>
+            </div>
+            <div className="text-center space-y-1 pt-1">
+              <div className="font-display text-[24px] text-ink leading-tight">You\u2019re verified.</div>
+              <div className="font-body text-[13px] text-muted">That badge shows up on every profile you create.</div>
+            </div>
+            <button
+              onClick={() => { setSelfieState('intro'); onDone(); }}
+              className="w-full py-4 rounded-full font-body font-medium text-white text-[15px]"
+              style={{ backgroundColor: '#12101C' }}
+            >
+              Continue
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const SignupDoneStep = () => {
+    const completedMode = signupMode;
+    const otherMode = completedMode === 'social' ? 'professional' : 'social';
+    const completedAccent = completedMode === 'professional' ? '#4F46E5' : '#FF2D87';
+    const otherAccent = otherMode === 'professional' ? '#4F46E5' : '#FF2D87';
+
+    return (
+      <div className="pt-10 space-y-6 text-center">
+        <div className="relative w-24 h-24 mx-auto">
+          <div className="absolute inset-0 rounded-full"
+               style={{
+                 background: `linear-gradient(135deg, ${completedAccent} 0%, #FF8A00 50%, #F43F5E 100%)`,
+                 boxShadow: `0 16px 40px -10px ${completedAccent}99`
+               }} />
+          <div className="absolute inset-0 flex items-center justify-center font-display italic text-white text-[36px]">
+            M
+          </div>
+        </div>
+
+        <div>
+          <h2 className="font-display text-[32px] leading-tight text-ink">
+            You\u2019re in.
+          </h2>
+          <p className="font-body text-[13px] text-muted mt-2 leading-relaxed max-w-[260px] mx-auto">
+            Your {completedMode} profile is live. Want to set up your {otherMode} profile too?
+          </p>
+        </div>
+
+        <div className="bg-surface rounded-2xl p-4 border border-warm text-left"
+             style={{ borderColor: `${otherAccent}40` }}>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style={{ backgroundColor: `${otherAccent}15` }}>
+              {otherMode === 'professional' ? (
+                <Briefcase size={18} style={{ color: otherAccent }} />
+              ) : (
+                <Heart size={18} style={{ color: otherAccent }} />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="font-body font-medium text-[14px] text-ink capitalize">
+                Add your {otherMode} profile
+              </div>
+              <div className="font-body text-[12px] text-muted mt-0.5 leading-snug">
+                Different answers, different crowd, same account. Do it now or later from settings.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-1">
           <button
-            onClick={() => setScreen('discover')}
-            className="w-full py-4 rounded-full font-body font-medium text-white text-[15px] transition-transform active:scale-[0.98]"
-            style={{ backgroundColor: '#12101C' }}
+            onClick={() => {
+              setSignupMode(otherMode);
+              setSignupStep('basics');
+            }}
+            className="w-full py-3.5 rounded-full font-body font-medium text-white text-[14px]"
+            style={{ backgroundColor: otherAccent, boxShadow: `0 10px 25px -8px ${otherAccent}aa` }}
           >
-            Done \u2014 see who\u2019s nearby
+            Set up my {otherMode} profile
+          </button>
+          <button
+            onClick={() => { setMode(completedMode); setScreen('discover'); }}
+            className="w-full py-3 font-body text-[14px] text-ink"
+          >
+            Maybe later \u2014 take me to Proximity
           </button>
         </div>
       </div>
     );
   };
+
+  // =========================================================
+  // DISCOVER
+  // =========================================================
 
   const DiscoverScreen = () => {
     const grouped = {
@@ -240,7 +715,7 @@ export default function App() {
             {[
               { key: 'off', label: 'Off', Icon: EyeOff },
               { key: 'social', label: 'Social', Icon: Heart },
-              { key: 'work', label: 'Work', Icon: Briefcase }
+              { key: 'professional', label: 'Pro', Icon: Briefcase }
             ].map(({ key, label, Icon }) => (
               <button
                 key={key}
@@ -266,12 +741,12 @@ export default function App() {
                       style={{ backgroundColor: accentColor }} />
               </div>
               <div className="font-body text-[12px] text-muted">
-                Visible to nearby \u00b7 {visiblePeople.length} people in {mode} mode
+                Visible to nearby \u00b7 {visiblePeople.length} people in {mode === 'professional' ? 'pro' : mode} mode
               </div>
             </>
           ) : (
             <div className="font-body text-[12px] text-muted">
-              You\u2019re invisible. Tap Social or Work to be discoverable.
+              You\u2019re invisible. Tap Social or Pro to be discoverable.
             </div>
           )}
         </div>
@@ -332,12 +807,8 @@ export default function App() {
                             </div>
                             <div className="font-body text-[11px] text-faint flex-shrink-0">{person.distance}</div>
                           </div>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {person.talkAbout.slice(0, 3).map((t, i) => (
-                              <span key={i} className="font-display italic text-[12px] text-muted">
-                                {t}{i < 2 && <span className="text-faint not-italic font-body"> \u00b7 </span>}
-                              </span>
-                            ))}
+                          <div className="font-display italic text-[12.5px] text-muted mt-0.5 truncate">
+                            {person.status} \u00b7 {person.affiliation}
                           </div>
                         </div>
                       </button>
@@ -352,9 +823,16 @@ export default function App() {
     );
   };
 
+  // =========================================================
+  // PERSON DETAIL
+  // =========================================================
+
   const PersonScreen = () => {
     if (!selectedPerson) return null;
     const p = selectedPerson;
+    const actions = getActions(p.mode);
+    const PrimaryIcon = actions.primaryIcon;
+    const SecondaryIcon = actions.secondaryIcon;
 
     return (
       <div className="h-full flex flex-col bg-cream relative">
@@ -377,14 +855,28 @@ export default function App() {
             >
               {p.initials}
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-display text-[26px] text-ink leading-tight">{p.name}, {p.age}</div>
               <div className="flex items-center gap-1.5 mt-1">
-                {p.mode === 'work' ? <Briefcase size={11} className="text-muted" /> : <Heart size={11} className="text-muted" />}
+                {p.mode === 'professional' ? <Briefcase size={11} className="text-muted" /> : <Heart size={11} className="text-muted" />}
                 <span className="font-body text-[11px] uppercase tracking-wider text-muted">
-                  {p.mode} mode
+                  {p.mode === 'professional' ? 'pro' : p.mode} mode
                 </span>
+                <div className="w-0.5 h-3 rounded-full bg-faint" />
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(6, 214, 160, 0.15)' }}>
+                  <Check size={8} style={{ color: '#06D6A0' }} strokeWidth={3} />
+                  <span className="font-body text-[9px] font-medium" style={{ color: '#059669' }}>Verified</span>
+                </div>
               </div>
+            </div>
+          </div>
+
+          {/* Status + affiliation */}
+          <div className="bg-surface rounded-2xl p-3.5 border border-warm mb-5">
+            <div className="font-display italic text-[15px] text-ink leading-snug">{p.status}</div>
+            <div className="font-body text-[12px] text-muted mt-1 flex items-center gap-1.5">
+              <Briefcase size={10} className="text-faint" />
+              {p.affiliation}
             </div>
           </div>
 
@@ -434,28 +926,29 @@ export default function App() {
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-7 pt-5 bg-gradient-to-t from-cream via-cream to-transparent">
           <div className="space-y-2">
             <button
-              onClick={() => { setActionTaken('hi'); }}
+              onClick={() => { setActionTaken('primary'); }}
               className="w-full py-3.5 rounded-full font-body font-medium text-white text-[15px] flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
               style={{
                 backgroundColor: p.accent,
                 boxShadow: `0 12px 30px -8px ${p.accent}cc`
               }}
             >
-              <Sparkles size={15} />
-              Say Hi
+              <PrimaryIcon size={15} />
+              {actions.primary}
             </button>
             <div className="flex gap-2">
               <button
-                onClick={() => { setActionTaken('plans'); }}
-                className="flex-1 py-3 rounded-full font-body font-medium text-ink text-[14px] bg-surface border border-warm transition-transform active:scale-[0.98]"
+                onClick={() => { setActionTaken('secondary'); }}
+                className="flex-1 py-3 rounded-full font-body font-medium text-ink text-[14px] bg-surface border border-warm transition-transform active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
-                Make Plans
+                <SecondaryIcon size={13} />
+                {actions.secondary}
               </button>
               <button
                 onClick={() => setScreen('discover')}
                 className="px-5 py-3 rounded-full font-body text-muted text-[14px] hover:text-ink transition-colors"
               >
-                Not interested
+                {actions.tertiary}
               </button>
             </div>
           </div>
@@ -476,12 +969,10 @@ export default function App() {
                 <Check size={26} className="text-white" strokeWidth={2.5} />
               </div>
               <div className="font-display text-[22px] text-ink leading-tight mb-2">
-                {actionTaken === 'hi' ? 'Hi sent.' : 'Invitation sent.'}
+                {actionTaken === 'primary' ? `${actions.primary}\u2009\u2014 sent.` : `${actions.secondary}\u2009\u2014 sent.`}
               </div>
               <div className="font-body text-[13px] text-muted leading-relaxed mb-5">
-                {actionTaken === 'hi'
-                  ? `We\u2019ll let you know when ${p.name.split(' ')[0]} responds. They won\u2019t see your interest if they pass.`
-                  : `${p.name.split(' ')[0]} will see your invitation to make plans.`}
+                {`We\u2019ll let you know when ${p.name.split(' ')[0]} responds. They won\u2019t see your interest if they pass.`}
               </div>
               <button
                 onClick={() => { setActionTaken(null); setScreen('discover'); }}
@@ -496,6 +987,10 @@ export default function App() {
       </div>
     );
   };
+
+  // =========================================================
+  // CONNECTIONS
+  // =========================================================
 
   const ConnectionsScreen = () => {
     const received = connections.filter(c => c.state === 'received');
@@ -519,12 +1014,13 @@ export default function App() {
                   <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#FF2D87' }} />
                 </div>
                 <div className="font-body font-medium text-[13px] text-ink uppercase tracking-wider">
-                  Said hi to you
+                  Reached out to you
                 </div>
               </div>
               <div className="space-y-2.5">
                 {received.map(c => {
                   const p = findPerson(c.personId);
+                  const act = getActions(p.mode);
                   return (
                     <div key={c.personId}
                          className="bg-surface rounded-2xl p-4 border-2 relative overflow-hidden"
@@ -540,7 +1036,7 @@ export default function App() {
                             <div className="font-body text-[11px] text-faint">{c.time}</div>
                           </div>
                           <div className="font-display italic text-[13px] text-muted truncate">
-                            {p.talkAbout.slice(0, 2).join(' \u00b7 ')}
+                            {p.status}
                           </div>
                         </div>
                       </div>
@@ -550,7 +1046,7 @@ export default function App() {
                           className="flex-1 py-2.5 rounded-full font-body font-medium text-white text-[13px]"
                           style={{ backgroundColor: p.accent, boxShadow: `0 6px 16px -6px ${p.accent}cc` }}
                         >
-                          Say hi back
+                          {act.primary} back
                         </button>
                         <button className="px-5 py-2.5 rounded-full font-body text-muted text-[13px] hover:text-ink">
                           Pass
@@ -615,6 +1111,7 @@ export default function App() {
               <div className="space-y-2">
                 {sent.map(c => {
                   const p = findPerson(c.personId);
+                  const act = getActions(p.mode);
                   return (
                     <div key={c.personId}
                          className="bg-surface rounded-2xl p-3 flex items-center gap-3 border border-warm">
@@ -624,7 +1121,7 @@ export default function App() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-body text-[13px] text-muted">
-                          Hi sent to <span className="text-ink font-medium">{p.name}</span>
+                          {act.primary} sent to <span className="text-ink font-medium">{p.name}</span>
                         </div>
                       </div>
                       <div className="font-body text-[11px] text-faint">{c.time}</div>
@@ -638,6 +1135,10 @@ export default function App() {
       </div>
     );
   };
+
+  // =========================================================
+  // ACTIVITY
+  // =========================================================
 
   const ActivityScreen = () => {
     const today = activity.filter(a => a.when === 'today');
@@ -698,8 +1199,8 @@ export default function App() {
       }
 
       const eventConfig = {
-        received: { Icon: Sparkles, text: 'said hi to you' },
-        accepted: { Icon: CheckCircle2, text: 'accepted your hi' },
+        received: { Icon: Sparkles, text: 'reached out to you' },
+        accepted: { Icon: CheckCircle2, text: 'accepted your hello' },
         plans: { Icon: Send, text: 'wants to make plans' }
       }[a.type];
 
@@ -772,32 +1273,26 @@ export default function App() {
     );
   };
 
-  const ProfileScreen = () => {
-    const profileAccent = profileMode === 'work' ? '#4F46E5' : '#FF2D87';
+  // =========================================================
+  // PROFILE — streamlined: no hobbies, no favorites
+  // =========================================================
 
-    const hobbies = {
-      social: ['bookbinding', 'cold-water swimming', 'vintage cameras', 'natural wine', 'hiking', 'ceramics'],
-      work: ['design systems', 'founder coaching', 'type design', 'prototyping', 'user research']
+  const ProfileScreen = () => {
+    const profileAccent = profileMode === 'professional' ? '#4F46E5' : '#FF2D87';
+
+    const statusText = {
+      social: 'Most at home at sunrise',
+      professional: 'Senior product designer'
     };
 
-    const favorites = {
-      social: [
-        { Icon: BookOpen, label: 'Book', value: 'A Little Life' },
-        { Icon: Film, label: 'Film', value: 'In the Mood for Love' },
-        { Icon: Music, label: 'Artist', value: 'Mk.gee' },
-        { Icon: Plane, label: 'City', value: 'Lisbon' }
-      ],
-      work: [
-        { Icon: BookOpen, label: 'Book', value: 'Shape Up by Basecamp' },
-        { Icon: Film, label: 'Doc', value: 'General Magic' },
-        { Icon: Music, label: 'Podcast', value: 'Dithering' },
-        { Icon: Plane, label: 'Conf', value: 'Config' }
-      ]
+    const affiliation = {
+      social: 'Berlin \u00b7 ex-NYC',
+      professional: 'Series B dev tools startup'
     };
 
     const bios = {
-      social: 'Designer in Berlin, ex-NYC. I\u2019m most awake around sunrise, worst at small talk, best at long walks.',
-      work: 'Senior product designer. Leading design for a Series B developer tools startup. Open to advising.'
+      social: 'Designer in Berlin, ex-NYC. Sunrise person, long walker, bad at small talk, best over coffee.',
+      professional: 'Leading design at a Series B dev tools startup. Open to advising and the occasional coffee.'
     };
 
     const answers = {
@@ -806,7 +1301,7 @@ export default function App() {
         starters: ['Coffee or matcha?', 'Last great book you read?', 'Best neighborhood you\u2019ve lived in?'],
         dontTalk: ['my ex', 'politics']
       },
-      work: {
+      professional: {
         talkAbout: ['design systems at scale', 'hiring your first designer', 'PM\u2194design friction'],
         starters: ['What are you building?', 'How\u2019s your team structured?', 'Biggest design debt you\u2019re carrying?'],
         dontTalk: ['compensation', 'my old company']
@@ -827,7 +1322,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto px-6 pb-24 pt-3">
           {/* Photo + name */}
-          <div className="flex flex-col items-center mb-6">
+          <div className="flex flex-col items-center mb-5">
             <button
               onClick={() => setPhotoUploaded(!photoUploaded)}
               className="relative group active:scale-95 transition-transform"
@@ -860,36 +1355,11 @@ export default function App() {
               </div>
             </button>
 
-            <div className="mt-4 text-center">
-              <input
-                type="text"
-                defaultValue="Morgan L."
-                className="font-display text-[24px] text-ink text-center bg-transparent border-none focus:outline-none w-full"
-              />
-              <div className="flex items-center justify-center gap-2 mt-1">
-                <input
-                  type="text"
-                  defaultValue="29"
-                  className="font-body text-[13px] text-muted bg-transparent border-none focus:outline-none w-8 text-right"
-                />
-                <div className="w-0.5 h-3 rounded-full bg-faint" />
-                <input
-                  type="text"
-                  defaultValue="she/her"
-                  className="font-body text-[13px] text-muted bg-transparent border-none focus:outline-none w-16"
-                />
-                <div className="w-0.5 h-3 rounded-full bg-faint" />
-                <div className="flex items-center gap-1">
-                  <MapPin size={11} className="text-muted" />
-                  <input
-                    type="text"
-                    defaultValue="Berlin"
-                    className="font-body text-[13px] text-muted bg-transparent border-none focus:outline-none w-14"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 mt-2.5">
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)' }}>
+            <div className="mt-3 text-center">
+              <div className="font-display text-[24px] text-ink">Morgan L.</div>
+              <div className="font-body text-[12px] text-faint mt-0.5">@morgan.l \u00b7 29 \u00b7 she/her</div>
+              <div className="flex items-center justify-center gap-1.5 mt-2">
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(6, 214, 160, 0.15)' }}>
                   <CheckCircle2 size={10} style={{ color: '#06D6A0' }} />
                   <span className="font-body text-[10px] font-medium" style={{ color: '#059669' }}>Verified</span>
                 </div>
@@ -902,7 +1372,7 @@ export default function App() {
           </div>
 
           {/* Mode toggle */}
-          <div className="mb-6">
+          <div className="mb-5">
             <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-2">Editing profile for</div>
             <div className="bg-surface rounded-full p-1 flex border border-warm relative">
               <div
@@ -916,7 +1386,7 @@ export default function App() {
               />
               {[
                 { key: 'social', label: 'Social', Icon: Heart },
-                { key: 'work', label: 'Work', Icon: Briefcase }
+                { key: 'professional', label: 'Professional', Icon: Briefcase }
               ].map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -930,15 +1400,34 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <div className="font-body text-[11px] text-faint mt-2 leading-relaxed">
-              Switch modes to edit a different version of your profile. Each mode has its own answers, bio, hobbies, and favorites.
+          </div>
+
+          {/* Status */}
+          <div className="mb-4">
+            <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-1.5">Status</div>
+            <input
+              type="text"
+              defaultValue={statusText[profileMode]}
+              className="w-full px-4 py-3 bg-surface rounded-2xl font-display italic text-[15px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
+            />
+          </div>
+
+          {/* Affiliation */}
+          <div className="mb-4">
+            <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-1.5">
+              {profileMode === 'professional' ? 'Where you work' : 'Notable affiliation'}
             </div>
+            <input
+              type="text"
+              defaultValue={affiliation[profileMode]}
+              className="w-full px-4 py-3 bg-surface rounded-2xl font-body text-[14px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
+            />
           </div>
 
           {/* About me */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="font-body text-[11px] uppercase tracking-wider text-ink">About me</div>
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="font-body text-[11px] uppercase tracking-wider text-ink">Bio</div>
               <div className="font-body text-[10px] text-faint">{bios[profileMode].length}/160</div>
             </div>
             <textarea
@@ -949,110 +1438,59 @@ export default function App() {
             />
           </div>
 
-          {/* Hobbies */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={12} style={{ color: profileAccent }} />
-              <div className="font-body text-[11px] uppercase tracking-wider text-ink">Hobbies & interests</div>
+          {/* Three-question answers — the only content blocks */}
+          <div className="mb-5">
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Sparkles size={12} style={{ color: profileAccent }} />
+                <div className="font-body text-[11px] uppercase tracking-wider text-ink">Talk to me about</div>
+              </div>
+              <div className="space-y-1 mt-2">
+                {answers[profileMode].talkAbout.map((t, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    defaultValue={t}
+                    className="w-full px-3.5 py-2.5 bg-surface rounded-xl font-display italic text-[14px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
+                  />
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {hobbies[profileMode].map((h, i) => (
-                <div key={i}
-                     className="px-3 py-1.5 rounded-full font-display italic text-[13px] flex items-center gap-1.5 group"
-                     style={{
-                       backgroundColor: `${profileAccent}12`,
-                       color: profileAccent,
-                       border: `1px solid ${profileAccent}25`
-                     }}>
-                  {h}
-                  <button className="opacity-50 hover:opacity-100">
-                    <X size={11} strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))}
-              <button className="px-3 py-1.5 rounded-full font-body text-[12px] text-muted border border-dashed border-faint hover:border-ink hover:text-ink transition-colors">
-                + Add
-              </button>
-            </div>
-          </div>
 
-          {/* Favorites */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2.5">
-              <Heart size={12} style={{ color: profileAccent }} />
-              <div className="font-body text-[11px] uppercase tracking-wider text-ink">Favorites</div>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-0.5">
+                <MessageSquare size={12} style={{ color: profileAccent }} />
+                <div className="font-body text-[11px] uppercase tracking-wider text-ink">Conversation starters</div>
+              </div>
+              <div className="space-y-1 mt-2">
+                {answers[profileMode].starters.map((s, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    defaultValue={s}
+                    className="w-full px-3.5 py-2.5 bg-surface rounded-xl font-body text-[13.5px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
+                  />
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {favorites[profileMode].map((f, i) => {
-                const Icon = f.Icon;
-                return (
-                  <div key={i} className="bg-surface rounded-2xl p-3 border border-warm flex items-start gap-2.5">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                         style={{ backgroundColor: `${profileAccent}15` }}>
-                      <Icon size={14} style={{ color: profileAccent }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-body text-[10px] uppercase tracking-wider text-faint">{f.label}</div>
-                      <input
-                        type="text"
-                        defaultValue={f.value}
-                        className="font-display italic text-[14px] text-ink bg-transparent border-none focus:outline-none w-full truncate"
-                      />
-                    </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <EyeOff size={12} className="text-faint" />
+                <div className="font-body text-[11px] uppercase tracking-wider text-ink">Don\u2019t talk about</div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {answers[profileMode].dontTalk.map((d, i) => (
+                  <div key={i} className="px-3 py-1.5 rounded-full bg-surface border border-warm font-body text-[12.5px] text-muted flex items-center gap-1.5">
+                    {d}
+                    <button className="opacity-50 hover:opacity-100">
+                      <X size={10} strokeWidth={2.5} />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Three-question answers */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare size={12} style={{ color: profileAccent }} />
-              <div className="font-body text-[11px] uppercase tracking-wider text-ink">Your three answers</div>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <div className="font-body text-[11px] text-muted mb-1.5">Talk to me about</div>
-                <div className="space-y-1">
-                  {answers[profileMode].talkAbout.map((t, i) => (
-                    <input
-                      key={i}
-                      type="text"
-                      defaultValue={t}
-                      className="w-full px-3.5 py-2.5 bg-surface rounded-xl font-display italic text-[14px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
-                    />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-body text-[11px] text-muted mb-1.5">Conversation starters</div>
-                <div className="space-y-1">
-                  {answers[profileMode].starters.map((s, i) => (
-                    <input
-                      key={i}
-                      type="text"
-                      defaultValue={s}
-                      className="w-full px-3.5 py-2.5 bg-surface rounded-xl font-body text-[13.5px] text-ink focus:outline-none border border-warm focus:border-ink transition-colors"
-                    />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-body text-[11px] text-muted mb-1.5">Don\u2019t talk about</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {answers[profileMode].dontTalk.map((d, i) => (
-                    <div key={i} className="px-3 py-1.5 rounded-full bg-surface border border-warm font-body text-[12.5px] text-muted flex items-center gap-1.5">
-                      {d}
-                      <button className="opacity-50 hover:opacity-100">
-                        <X size={10} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  ))}
-                  <button className="px-3 py-1.5 rounded-full font-body text-[12px] text-muted border border-dashed border-faint hover:border-ink hover:text-ink transition-colors">
-                    + Add
-                  </button>
-                </div>
+                ))}
+                <button className="px-3 py-1.5 rounded-full font-body text-[12px] text-muted border border-dashed border-faint hover:border-ink hover:text-ink transition-colors">
+                  + Add
+                </button>
               </div>
             </div>
           </div>
@@ -1060,10 +1498,10 @@ export default function App() {
           {/* Quick links */}
           <div className="space-y-2 mb-4">
             {[
-              { label: 'Visibility & privacy', sub: 'Who can see you, radius, ghost mode', action: () => setShowSettings(true) },
-              { label: 'Notifications', sub: 'Hi\u2019s, plans, activity updates' },
+              { label: 'Visibility & privacy', sub: 'Radius, ghost mode, who sees you', action: () => setShowSettings(true) },
+              { label: 'Notifications', sub: 'New messages, nearby activity' },
               { label: 'Blocked users', sub: '0 people blocked' },
-              { label: 'Help & safety center', sub: 'Report, guides, contact us' }
+              { label: 'Help & safety', sub: 'Report, guides, contact us' }
             ].map((item, i) => (
               <button key={i}
                       onClick={item.action}
@@ -1077,7 +1515,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Preview button */}
           <button
             onClick={() => setScreen('preview')}
             className="w-full py-3.5 rounded-full font-body font-medium text-white text-[14px] flex items-center justify-center gap-2 mb-3"
@@ -1098,50 +1535,44 @@ export default function App() {
     );
   };
 
+  // =========================================================
+  // PREVIEW — mirrors streamlined profile
+  // =========================================================
+
   const PreviewScreen = () => {
-    const previewAccent = profileMode === 'work' ? '#4F46E5' : '#FF2D87';
+    const previewAccent = profileMode === 'professional' ? '#4F46E5' : '#FF2D87';
 
-    const hobbies = {
-      social: ['bookbinding', 'cold-water swimming', 'vintage cameras', 'natural wine', 'hiking', 'ceramics'],
-      work: ['design systems', 'founder coaching', 'type design', 'prototyping', 'user research']
+    const statusText = {
+      social: 'Most at home at sunrise',
+      professional: 'Senior product designer'
     };
-
-    const favorites = {
-      social: [
-        { Icon: BookOpen, label: 'Book', value: 'A Little Life' },
-        { Icon: Film, label: 'Film', value: 'In the Mood for Love' },
-        { Icon: Music, label: 'Artist', value: 'Mk.gee' },
-        { Icon: Plane, label: 'City', value: 'Lisbon' }
-      ],
-      work: [
-        { Icon: BookOpen, label: 'Book', value: 'Shape Up by Basecamp' },
-        { Icon: Film, label: 'Doc', value: 'General Magic' },
-        { Icon: Music, label: 'Podcast', value: 'Dithering' },
-        { Icon: Plane, label: 'Conf', value: 'Config' }
-      ]
+    const affiliation = {
+      social: 'Berlin \u00b7 ex-NYC',
+      professional: 'Series B dev tools startup'
     };
-
     const bios = {
-      social: 'Designer in Berlin, ex-NYC. I\u2019m most awake around sunrise, worst at small talk, best at long walks.',
-      work: 'Senior product designer. Leading design for a Series B developer tools startup. Open to advising.'
+      social: 'Designer in Berlin, ex-NYC. Sunrise person, long walker, bad at small talk, best over coffee.',
+      professional: 'Leading design at a Series B dev tools startup. Open to advising and the occasional coffee.'
     };
-
     const answers = {
       social: {
         talkAbout: ['bookbinding', 'longform podcasts', 'Lisbon last May'],
         starters: ['Coffee or matcha?', 'Last great book you read?', 'Best neighborhood you\u2019ve lived in?'],
         dontTalk: ['my ex', 'politics']
       },
-      work: {
+      professional: {
         talkAbout: ['design systems at scale', 'hiring your first designer', 'PM\u2194design friction'],
         starters: ['What are you building?', 'How\u2019s your team structured?', 'Biggest design debt you\u2019re carrying?'],
         dontTalk: ['compensation', 'my old company']
       }
     };
 
+    const actions = getActions(profileMode);
+    const PrimaryIcon = actions.primaryIcon;
+    const SecondaryIcon = actions.secondaryIcon;
+
     return (
       <div className="h-full flex flex-col bg-cream relative">
-        {/* Preview banner */}
         <div className="px-4 pt-10 pb-2">
           <div className="rounded-2xl px-4 py-2.5 flex items-center justify-between"
                style={{
@@ -1167,7 +1598,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Faux distance tag (matches PersonScreen layout) */}
         <div className="px-6 pt-2 pb-3 flex items-center justify-between">
           <button onClick={() => setScreen('profile')} className="text-ink opacity-40">
             <ArrowLeft size={20} />
@@ -1178,9 +1608,8 @@ export default function App() {
           <div className="w-5" />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-10">
-          {/* Header with photo */}
-          <div className="flex items-center gap-4 mb-5">
+        <div className="flex-1 overflow-y-auto px-6 pb-32">
+          <div className="flex items-center gap-4 mb-4">
             {photoUploaded ? (
               <div className="w-20 h-20 rounded-full flex items-center justify-center font-display italic text-white text-[34px]"
                    style={{
@@ -1198,22 +1627,25 @@ export default function App() {
                 ML
               </div>
             )}
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-display text-[26px] text-ink leading-tight">Morgan L., 29</div>
-              <div className="flex items-center gap-1.5 mt-1">
-                {profileMode === 'work' ? <Briefcase size={11} className="text-muted" /> : <Heart size={11} className="text-muted" />}
-                <span className="font-body text-[11px] uppercase tracking-wider text-muted">
-                  {profileMode} mode
-                </span>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {profileMode === 'professional' ? <Briefcase size={11} className="text-muted" /> : <Heart size={11} className="text-muted" />}
+                <span className="font-body text-[11px] uppercase tracking-wider text-muted">{profileMode}</span>
                 <div className="w-0.5 h-3 rounded-full bg-faint" />
-                <MapPin size={10} className="text-muted" />
-                <span className="font-body text-[11px] text-muted">Berlin</span>
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(6, 214, 160, 0.15)' }}>
+                  <Check size={8} style={{ color: '#06D6A0' }} strokeWidth={3} />
+                  <span className="font-body text-[9px] font-medium" style={{ color: '#059669' }}>Verified</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1 mt-1.5 px-1.5 py-0.5 rounded-full w-fit"
-                   style={{ backgroundColor: 'rgba(6, 214, 160, 0.15)' }}>
-                <CheckCircle2 size={9} style={{ color: '#06D6A0' }} />
-                <span className="font-body text-[9px] font-medium" style={{ color: '#059669' }}>Verified</span>
-              </div>
+            </div>
+          </div>
+
+          <div className="bg-surface rounded-2xl p-3.5 border border-warm mb-5">
+            <div className="font-display italic text-[15px] text-ink leading-snug">{statusText[profileMode]}</div>
+            <div className="font-body text-[12px] text-muted mt-1 flex items-center gap-1.5">
+              <Briefcase size={10} className="text-faint" />
+              {affiliation[profileMode]}
             </div>
           </div>
 
@@ -1222,7 +1654,6 @@ export default function App() {
           </p>
 
           <div className="space-y-5">
-            {/* Talk about */}
             <div>
               <div className="flex items-center gap-2 mb-2.5">
                 <Sparkles size={12} style={{ color: previewAccent }} />
@@ -1235,53 +1666,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Hobbies */}
-            <div className="border-t border-warm pt-5">
-              <div className="flex items-center gap-2 mb-2.5">
-                <Heart size={12} style={{ color: previewAccent }} />
-                <div className="font-body text-[11px] uppercase tracking-wider text-ink">Hobbies & interests</div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {hobbies[profileMode].map((h, i) => (
-                  <div key={i}
-                       className="px-3 py-1.5 rounded-full font-display italic text-[13px]"
-                       style={{
-                         backgroundColor: `${previewAccent}12`,
-                         color: previewAccent,
-                         border: `1px solid ${previewAccent}25`
-                       }}>
-                    {h}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Favorites */}
-            <div className="border-t border-warm pt-5">
-              <div className="flex items-center gap-2 mb-2.5">
-                <Sparkles size={12} style={{ color: previewAccent }} />
-                <div className="font-body text-[11px] uppercase tracking-wider text-ink">Favorites</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {favorites[profileMode].map((f, i) => {
-                  const Icon = f.Icon;
-                  return (
-                    <div key={i} className="bg-surface rounded-2xl p-3 border border-warm flex items-start gap-2.5">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                           style={{ backgroundColor: `${previewAccent}15` }}>
-                        <Icon size={14} style={{ color: previewAccent }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-body text-[10px] uppercase tracking-wider text-faint">{f.label}</div>
-                        <div className="font-display italic text-[14px] text-ink truncate">{f.value}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Conversation starters */}
             <div className="border-t border-warm pt-5">
               <div className="flex items-center gap-2 mb-2.5">
                 <MessageSquare size={12} style={{ color: previewAccent }} />
@@ -1296,7 +1680,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Don't talk about */}
             <div className="border-t border-warm pt-5 pb-2">
               <div className="flex items-center gap-2 mb-2">
                 <EyeOff size={12} className="text-faint" />
@@ -1308,7 +1691,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Faux action bar (dimmed to show they exist for others) */}
           <div className="mt-8 pt-5 border-t border-warm">
             <div className="font-body text-[11px] uppercase tracking-wider text-faint mb-3 text-center">
               What others see at the bottom
@@ -1316,22 +1698,22 @@ export default function App() {
             <div className="space-y-2 opacity-60 pointer-events-none">
               <div className="w-full py-3.5 rounded-full font-body font-medium text-white text-[15px] flex items-center justify-center gap-2"
                    style={{ backgroundColor: previewAccent }}>
-                <Sparkles size={15} />
-                Say Hi
+                <PrimaryIcon size={15} />
+                {actions.primary}
               </div>
               <div className="flex gap-2">
-                <div className="flex-1 py-3 rounded-full font-body font-medium text-ink text-[14px] bg-surface border border-warm text-center">
-                  Make Plans
+                <div className="flex-1 py-3 rounded-full font-body font-medium text-ink text-[14px] bg-surface border border-warm text-center flex items-center justify-center gap-1.5">
+                  <SecondaryIcon size={13} />
+                  {actions.secondary}
                 </div>
                 <div className="px-5 py-3 rounded-full font-body text-muted text-[14px]">
-                  Not interested
+                  {actions.tertiary}
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Bottom action: back to editing */}
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-7 pt-4 bg-gradient-to-t from-cream via-cream to-transparent">
           <button
             onClick={() => setScreen('profile')}
@@ -1349,19 +1731,21 @@ export default function App() {
     );
   };
 
+  // =========================================================
+  // SETTINGS DRAWER
+  // =========================================================
+
   const SettingsDrawer = () => (
     <div className={`absolute inset-0 z-30 transition-opacity duration-300 ${showSettings ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
       <div className="absolute inset-0" style={{ backgroundColor: 'rgba(18, 16, 28, 0.45)' }} onClick={() => setShowSettings(false)} />
       <div className={`absolute bottom-0 left-0 right-0 bg-cream rounded-t-3xl p-6 transition-transform duration-300 ease-out ${showSettings ? 'translate-y-0' : 'translate-y-full'}`}>
         <div className="w-10 h-1 rounded-full bg-faint mx-auto mb-5" />
-
         <div className="flex items-center justify-between mb-5">
           <div className="font-display text-[22px] text-ink">Visibility</div>
           <button onClick={() => setShowSettings(false)} className="text-muted">
             <X size={20} />
           </button>
         </div>
-
         <div className="space-y-5">
           <div>
             <div className="font-body text-[11px] uppercase tracking-wider text-ink mb-2">Your radius</div>
@@ -1384,7 +1768,6 @@ export default function App() {
               ))}
             </div>
           </div>
-
           <div className="bg-surface rounded-2xl p-4 border border-warm flex items-center justify-between">
             <div>
               <div className="font-body text-[14px] font-medium text-ink">Auto-disappear</div>
@@ -1394,7 +1777,6 @@ export default function App() {
               <div className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-cream" />
             </div>
           </div>
-
           <div className="bg-surface rounded-2xl p-4 border border-warm flex items-center justify-between">
             <div>
               <div className="font-body text-[14px] font-medium text-ink">Show me on the list</div>
@@ -1408,12 +1790,10 @@ export default function App() {
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-cream transition-all ${visible ? 'right-0.5' : 'left-0.5'}`} />
             </button>
           </div>
-
           <div className="font-body text-[11.5px] text-muted leading-relaxed pt-1">
             We never show your location on a map. Other users only see <em className="font-display not-italic">that</em> you\u2019re near \u2014 never <em className="font-display not-italic">where</em>.
           </div>
         </div>
-
         <button
           onClick={() => setShowSettings(false)}
           className="w-full py-3.5 rounded-full font-body font-medium text-white text-[15px] mt-6"
@@ -1424,6 +1804,10 @@ export default function App() {
       </div>
     </div>
   );
+
+  // =========================================================
+  // BOTTOM NAV
+  // =========================================================
 
   const BottomNav = () => {
     const tabs = [
@@ -1465,7 +1849,9 @@ export default function App() {
     );
   };
 
-  // ============ MAIN LAYOUT ============
+  // =========================================================
+  // MAIN LAYOUT
+  // =========================================================
 
   const showNav = ['discover', 'connections', 'activity', 'profile'].includes(screen);
 
@@ -1498,12 +1884,12 @@ export default function App() {
             Proximity \u2014 the social handshake for shared spaces.
           </h2>
           <p className="font-body text-[13.5px] leading-relaxed" style={{ color: '#4A4458' }}>
-            Tap through six live screens. Toggle modes, open a profile, send a Hi, browse Connections and Activity, and edit your full profile \u2014 photo, bio, hobbies, favorites.
+            New signup flow with phone verify, username, live selfie check, and mode picker. Streamlined profiles. Mode-aware action buttons.
           </p>
           <div className="mt-6 space-y-2 font-body text-[12px]" style={{ color: '#4A4458' }}>
-            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#FF2D87' }} /> Social mode \u2014 electric magenta</div>
-            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#4F46E5' }} /> Work mode \u2014 cobalt violet</div>
-            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#D9F65C', boxShadow: '0 0 6px #D9F65C' }} /> Live "in this room" indicator</div>
+            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#FF2D87' }} /> Social \u2014 Come say hi / Let\u2019s chat</div>
+            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#4F46E5' }} /> Professional \u2014 Let\u2019s connect / Tap me in</div>
+            <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#06D6A0' }} /> Every user verified with a live selfie</div>
           </div>
         </div>
 
@@ -1520,7 +1906,7 @@ export default function App() {
           >
             <div className="relative h-full">
               {screen === 'welcome' && <WelcomeScreen />}
-              {screen === 'setup' && <SetupScreen />}
+              {screen === 'signup' && <SignupScreen />}
               {screen === 'discover' && <DiscoverScreen />}
               {screen === 'person' && <PersonScreen />}
               {screen === 'connections' && <ConnectionsScreen />}
@@ -1537,7 +1923,7 @@ export default function App() {
               interactive prototype
             </div>
             <div className="font-body text-[12px]" style={{ color: '#4A4458' }}>
-              Tap through. Toggle modes. Try every tab.
+              Tap through. Create an account. Try every tab.
             </div>
           </div>
         </div>
