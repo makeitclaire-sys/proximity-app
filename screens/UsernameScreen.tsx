@@ -108,7 +108,7 @@ export default function UsernameScreen({ navigation }: Props) {
                 onPress={() => {
                   if (isAvailable) {
                     Keyboard.dismiss()
-                    alert('Next step: Birthday screen (coming soon)')
+                    navigation.navigate('Birthday')
                   }
                 }}
               >
