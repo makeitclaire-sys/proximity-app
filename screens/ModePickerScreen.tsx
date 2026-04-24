@@ -64,8 +64,7 @@ export default function ModePickerScreen({ navigation }: Props) {
             style={[styles.primaryButton, !selected && styles.primaryButtonDisabled]}
             onPress={() => {
               if (selected) {
-                // navigate to home / main app
-                alert(`Mode set: ${selected}. Next: home screen.`)
+                navigation.navigate('Basics', { mode: selected })
               }
             }}
           >

@@ -7,6 +7,7 @@ import UsernameScreen from '../screens/UsernameScreen'
 import BirthdayScreen from '../screens/BirthdayScreen'
 import SelfieScreen from '../screens/SelfieScreen'
 import ModePickerScreen from '../screens/ModePickerScreen'
+import BasicsScreen from '../screens/BasicsScreen'
 
 export type RootStackParamList = {
   Welcome: undefined
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   Birthday: undefined
   Selfie: undefined
   ModePicker: undefined
+  Basics: { mode?: 'social' | 'professional' } | undefined
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -36,6 +38,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Birthday" component={BirthdayScreen} />
         <Stack.Screen name="Selfie" component={SelfieScreen} />
         <Stack.Screen name="ModePicker" component={ModePickerScreen} />
+        <Stack.Screen name="Basics" component={BasicsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )
