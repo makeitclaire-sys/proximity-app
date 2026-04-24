@@ -129,7 +129,7 @@ export default function BasicsScreen({ navigation, route }: Props) {
                 onPress={() => {
                   if (canContinue) {
                     Keyboard.dismiss()
-                    alert('Next step: Done screen (coming soon)')
+                    navigation.navigate('Done', { mode })
                   }
                 }}
               >
