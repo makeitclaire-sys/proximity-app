@@ -1,4 +1,5 @@
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert, Image } from "react-native"
+import { View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert, Image } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
@@ -14,6 +15,7 @@ const MODE_ACCENT: Record<"social" | "professional", string> = {
 export default function MyProfileScreen() {
   const navigation = useNavigation<NavProp>()
   const { profile, updateProfile, toggleVisibility } = useUser()
+  const insets = useSafeAreaInsets()
   const accent = MODE_ACCENT[profile.mode]
   const initials = profile.name.split(" ").map(p => p[0]).join("")
 
@@ -29,28 +31,39 @@ export default function MyProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
-          <Text style={styles.brand}>Proximity</Text>
-          <Pressable onPress={openSettings} style={styles.settingsButton} hitSlop={8}>
-            <Text style={styles.settingsIcon}>•••</Text>
-          </Pressable>
+        {/* ── Full-width hero — same structure as ProfileDetailScreen ── */}
+        <View style={styles.hero}>
+          {profile.avatarUrl ? (
+            <Image
+              source={{ uri: profile.avatarUrl }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: accent + "55", justifyContent: "center", alignItems: "center" }]}>
+              <Text style={[styles.heroInitials, { color: "#FFFFFF" }]}>{initials}</Text>
+            </View>
+          )}
+
+          {/* Tint over whole image, heavier band at bottom for name readability */}
+          <View style={styles.heroOverlayFull} />
+          <View style={styles.heroOverlayBottom} />
+
+          {/* Name pinned to bottom of hero */}
+          <View style={[styles.heroContent, { paddingBottom: 20 }]}>
+            <Text style={styles.heroName}>{profile.name}, {profile.age}</Text>
+          </View>
         </View>
 
-        <View style={styles.profileHeader}>
-          <View style={[styles.avatar, { backgroundColor: accent + "20" }]}>
-            {profile.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={[styles.avatarText, { color: accent }]}>{initials}</Text>
-            )}
-          </View>
-          <Text style={styles.name}>{profile.name}, {profile.age}</Text>
-        </View>
+        {/* Debug: confirm avatar URL is actually populated */}
+        <Text style={styles.debugText}>
+          Avatar URL: {profile.avatarUrl ?? "none"}
+        </Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>MODE</Text>
@@ -138,7 +151,15 @@ export default function MyProfileScreen() {
           <Text style={styles.primaryButtonText}>Edit profile</Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Brand + settings float over the hero, respecting safe area top */}
+      <View style={[styles.floatingHeader, { top: insets.top + 8 }]}>
+        <Text style={styles.brand}>Proximity</Text>
+        <Pressable onPress={openSettings} style={styles.settingsButton} hitSlop={8}>
+          <Text style={styles.settingsIcon}>•••</Text>
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
@@ -148,55 +169,99 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFB",
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
     gap: 28,
+    paddingBottom: 40,
   },
-  brandRow: {
+
+  // ── Hero (mirrors ProfileDetailScreen) ──
+  hero: {
+    width: "100%",
+    height: 330,
+    overflow: "hidden",
+    backgroundColor: "#1B1B2E",
+  },
+  heroInitials: {
+    fontSize: 80,
+    fontWeight: "800",
+    letterSpacing: -2,
+  },
+  heroOverlayFull: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  heroOverlayBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 180,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+  heroContent: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 22,
+    gap: 6,
+  },
+  heroName: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    lineHeight: 36,
+    letterSpacing: -0.3,
+  },
+
+  // ── Floating brand / settings ──
+  floatingHeader: {
+    position: "absolute",
+    left: 0,
+    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 20,
   },
   brand: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#12101C",
+    color: "#FFFFFF",
   },
   settingsButton: {
     padding: 4,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   settingsIcon: {
-    fontSize: 18,
-    color: "#4A4458",
+    fontSize: 16,
+    color: "#FFFFFF",
     letterSpacing: 1,
   },
 
-  // Header
-  profileHeader: {
+  // ── Debug ──
+  debugText: {
+    fontSize: 11,
+    color: "#A8A3B8",
+    paddingHorizontal: 24,
+    marginTop: -12,
+  },
+
+  // ── Sections ──
+  section: {
     gap: 10,
+    paddingHorizontal: 24,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarImage: {
-    width: 80,
-    height: 80,
-  },
-  avatarText: {
-    fontSize: 28,
+  sectionLabel: {
+    fontSize: 11,
     fontWeight: "700",
-  },
-  name: {
-    fontSize: 28,
-    fontWeight: "800",
     color: "#12101C",
-    lineHeight: 34,
+    letterSpacing: 1,
+  },
+  sectionLabelMuted: {
+    color: "#A8A3B8",
   },
 
   // Mode toggle
@@ -225,19 +290,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
-  // Sections
-  section: {
-    gap: 10,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#12101C",
-    letterSpacing: 1,
-  },
-  sectionLabelMuted: {
-    color: "#A8A3B8",
-  },
   bio: {
     fontSize: 15,
     lineHeight: 23,
@@ -311,12 +363,13 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
 
-  // Actions
+  // Edit button
   primaryButton: {
     backgroundColor: "#12101C",
     paddingVertical: 16,
     borderRadius: 999,
     alignItems: "center",
+    marginHorizontal: 24,
   },
   primaryButtonText: {
     color: "#FFFFFF",
