@@ -36,7 +36,7 @@ export default function WelcomeScreen({ navigation }: Props) {
             <Text style={styles.primaryButtonText}>Create your account</Text>
           </Pressable>
 
-          <Pressable onPress={() => alert('Later we can connect this to the demo or discover flow')}>
+          <Pressable onPress={() => navigation.replace('MainTabs')}>
             <Text style={styles.secondaryButtonText}>Skip to the demo</Text>
           </Pressable>
         </View>

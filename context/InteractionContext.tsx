@@ -2,28 +2,28 @@ import { createContext, useContext, useState } from "react"
 import type { ReactNode } from "react"
 
 type InteractionState = {
-  hiRequests: number[]
-  chatRequests: number[]
-  hiddenUsers: number[]
-  sendHi: (id: number) => void
-  sendChat: (id: number) => void
-  hideUser: (id: number) => void
+  hiRequests: string[]
+  chatRequests: string[]
+  hiddenUsers: string[]
+  sendHi: (id: string) => void
+  sendChat: (id: string) => void
+  hideUser: (id: string) => void
 }
 
 const InteractionContext = createContext<InteractionState | null>(null)
 
 export function InteractionProvider({ children }: { children: ReactNode }) {
-  const [hiRequests, setHiRequests] = useState<number[]>([])
-  const [chatRequests, setChatRequests] = useState<number[]>([])
-  const [hiddenUsers, setHiddenUsers] = useState<number[]>([])
+  const [hiRequests, setHiRequests] = useState<string[]>([])
+  const [chatRequests, setChatRequests] = useState<string[]>([])
+  const [hiddenUsers, setHiddenUsers] = useState<string[]>([])
 
-  const sendHi = (id: number) =>
+  const sendHi = (id: string) =>
     setHiRequests(prev => (prev.includes(id) ? prev : [...prev, id]))
 
-  const sendChat = (id: number) =>
+  const sendChat = (id: string) =>
     setChatRequests(prev => (prev.includes(id) ? prev : [...prev, id]))
 
-  const hideUser = (id: number) =>
+  const hideUser = (id: string) =>
     setHiddenUsers(prev => (prev.includes(id) ? prev : [...prev, id]))
 
   return (

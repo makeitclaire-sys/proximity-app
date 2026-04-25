@@ -8,11 +8,15 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Image,
 } from "react-native"
+import * as ImagePicker from "expo-image-picker"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import { useUser } from "../context/UserContext"
+import { updateProfile as saveToSupabase, uploadAvatar } from "../services/profileService"
 
 type Props = NativeStackScreenProps<RootStackParamList, "EditProfile">
 
@@ -21,18 +25,83 @@ export default function EditProfileScreen({ navigation }: Props) {
 
   const [name, setName] = useState(profile.name)
   const [bio, setBio] = useState(profile.bio)
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "")
   const [interestsText, setInterestsText] = useState(profile.interests.join("\n"))
   const [talkText, setTalkText] = useState(profile.talkTopics.join("\n"))
   const [avoidText, setAvoidText] = useState(profile.avoidTopics.join("\n"))
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
-  const save = () => {
-    updateProfile({
-      name: name.trim() || profile.name,
-      bio: bio.trim(),
-      interests: interestsText.split("\n").map(s => s.trim()).filter(Boolean),
-      talkTopics: talkText.split("\n").map(s => s.trim()).filter(Boolean),
-      avoidTopics: avoidText.split("\n").map(s => s.trim()).filter(Boolean),
+  const initials = name.trim()
+    ? name.trim().split(" ").map(p => p[0]).join("")
+    : "?"
+
+  const pickAndUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== "granted") {
+      Alert.alert("Permission required", "We need access to your photos to set a profile picture.")
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
     })
+
+    if (result.canceled) return
+
+    const asset = result.assets[0]
+
+    if (profile.supabaseId == null) {
+      // No Supabase ID yet — use local URI as preview only
+      setAvatarUrl(asset.uri)
+      updateProfile({ avatarUrl: asset.uri })
+      return
+    }
+
+    setUploading(true)
+    try {
+      const publicUrl = await uploadAvatar(profile.supabaseId, asset.uri)
+      setAvatarUrl(publicUrl)
+      updateProfile({ avatarUrl: publicUrl })
+      await saveToSupabase(profile.supabaseId, { avatar_url: publicUrl })
+    } catch {
+      Alert.alert("Upload failed", "Could not upload your photo. Please try again.")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const save = async () => {
+    const trimmedName = name.trim() || profile.name
+    const interests = interestsText.split("\n").map(s => s.trim()).filter(Boolean)
+    const talkTopics = talkText.split("\n").map(s => s.trim()).filter(Boolean)
+    const avoidTopics = avoidText.split("\n").map(s => s.trim()).filter(Boolean)
+    const trimmedAvatarUrl = avatarUrl.trim() || null
+
+    updateProfile({ name: trimmedName, bio: bio.trim(), interests, talkTopics, avoidTopics, avatarUrl: trimmedAvatarUrl })
+
+    if (profile.supabaseId != null) {
+      setSaving(true)
+      try {
+        await saveToSupabase(profile.supabaseId, {
+          name: trimmedName,
+          bio: bio.trim(),
+          interests,
+          talk_topics: talkTopics,
+          avoid_topics: avoidTopics,
+          avatar_url: trimmedAvatarUrl,
+        })
+      } catch {
+        Alert.alert("Error", "Could not save to Supabase. Changes have been saved locally.")
+        setSaving(false)
+        return
+      }
+      setSaving(false)
+    }
+
     navigation.goBack()
   }
 
@@ -54,6 +123,39 @@ export default function EditProfileScreen({ navigation }: Props) {
             keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.screenTitle}>Edit Profile</Text>
+
+            {/* Photo picker */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>PHOTO</Text>
+              <View style={styles.photoRow}>
+                <View style={styles.avatarPreview}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatarPreviewImage} />
+                  ) : (
+                    <Text style={styles.avatarPreviewInitials}>{initials}</Text>
+                  )}
+                </View>
+                <View style={styles.photoActions}>
+                  <Pressable
+                    style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+                    onPress={pickAndUpload}
+                    disabled={uploading}
+                  >
+                    <Text style={styles.uploadButtonText}>
+                      {uploading ? "Uploading…" : avatarUrl ? "Change Photo" : "Upload Photo"}
+                    </Text>
+                  </Pressable>
+                  {avatarUrl ? (
+                    <Pressable
+                      style={styles.removeButton}
+                      onPress={() => setAvatarUrl("")}
+                    >
+                      <Text style={styles.removeButtonText}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            </View>
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>NAME</Text>
@@ -119,8 +221,14 @@ export default function EditProfileScreen({ navigation }: Props) {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Pressable style={styles.saveButton} onPress={save}>
-              <Text style={styles.saveButtonText}>Save changes</Text>
+            <Pressable
+              style={[styles.saveButton, (saving || uploading) && styles.saveButtonDisabled]}
+              onPress={save}
+              disabled={saving || uploading}
+            >
+              <Text style={styles.saveButtonText}>
+                {saving ? "Saving…" : "Save changes"}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -159,6 +267,60 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#12101C",
     lineHeight: 34,
+  },
+
+  // Photo picker
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  avatarPreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
+    backgroundColor: "#EEEBF2",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  avatarPreviewImage: {
+    width: 72,
+    height: 72,
+  },
+  avatarPreviewInitials: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#A8A3B8",
+  },
+  photoActions: {
+    flex: 1,
+    gap: 8,
+  },
+  uploadButton: {
+    backgroundColor: "#12101C",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  uploadButtonDisabled: {
+    opacity: 0.5,
+  },
+  uploadButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  removeButton: {
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  removeButtonText: {
+    fontSize: 13,
+    color: "#A8A3B8",
+    fontWeight: "500",
   },
 
   // Fields
@@ -208,6 +370,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     alignItems: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
   },
   saveButtonText: {
     color: "#FFFFFF",

@@ -1,56 +1,32 @@
-import { useState } from "react"
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Alert } from "react-native"
+import { useState, useEffect } from "react"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import { mockPeople } from "../data/mockPeople"
 import { useInteractions } from "../context/InteractionContext"
+import { getProfiles, supabaseProfilesCache } from "../services/profileService"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
 type Conversation = {
-  id: number
-  personId?: number
+  id: string
+  personId: string
   name: string
   lastMessage: string
   time: string
   unread: number
 }
 
-const INITIAL_CONVERSATIONS: Conversation[] = [
-  {
-    id: 1,
-    personId: 1,
-    name: "Maya R.",
-    lastMessage: "That coffee spot on 5th is actually really good!",
-    time: "2m",
-    unread: 2,
-  },
-  {
-    id: 2,
-    personId: 14,
-    name: "Chris L.",
-    lastMessage: "Let me know if you're around this weekend",
-    time: "1h",
-    unread: 0,
-  },
-  {
-    id: 3,
-    personId: 10,
-    name: "Jordan M.",
-    lastMessage: "Totally agree, the workshop was brilliant",
-    time: "3h",
-    unread: 1,
-  },
-  {
-    id: 4,
-    personId: 3,
-    name: "Priya S.",
-    lastMessage: "Haha yes, terrible pun — appreciated though",
-    time: "Yesterday",
-    unread: 0,
-  },
+const MOCK_LAST_MESSAGES = [
+  "That was really interesting, thanks for sharing!",
+  "Let me know if you're around this weekend",
+  "Totally agree, the talk was brilliant",
+  "Haha yes, great chatting with you!",
+  "Would love to grab coffee sometime",
 ]
+
+const MOCK_TIMES = ["2m", "1h", "3h", "Yesterday", "2d"]
 
 const AVATAR_COLORS = [
   { bg: "rgba(255, 45, 135, 0.12)", fg: "#FF2D87" },
@@ -59,20 +35,51 @@ const AVATAR_COLORS = [
   { bg: "rgba(255, 159, 28, 0.12)", fg: "#FF9F1C" },
 ]
 
-const getAvatar = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length]
+function hashId(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) & 0x7fffffff
+  }
+  return h
+}
+
+const getAvatar = (id: string) => AVATAR_COLORS[hashId(id) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]
 const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("")
 
 export default function MessagesScreen() {
   const navigation = useNavigation<NavProp>()
   const { chatRequests } = useInteractions()
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS)
+
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getProfiles()
+      .then(data => {
+        if (!cancelled) {
+          const convos: Conversation[] = data.map((person, i) => ({
+            id: person.id,
+            personId: person.id,
+            name: person.name,
+            lastMessage: MOCK_LAST_MESSAGES[i % MOCK_LAST_MESSAGES.length],
+            time: MOCK_TIMES[i % MOCK_TIMES.length],
+            unread: i < 2 ? (i === 0 ? 2 : 1) : 0,
+          }))
+          setConversations(convos)
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const chatConvos: Conversation[] = chatRequests
-    .filter(id => !INITIAL_CONVERSATIONS.some(c => c.personId === id))
+    .filter(id => !conversations.some(c => c.personId === id))
     .flatMap(id => {
-      const p = mockPeople.find(m => m.id === id)
+      const p = mockPeople.find(m => m.id === id) ?? supabaseProfilesCache.get(id)
       return p
-        ? [{ id: id + 1000, personId: id, name: p.name, lastMessage: "You sent a chat request", time: "Now", unread: 0 }]
+        ? [{ id: id + "-chat", personId: id, name: p.name, lastMessage: "You sent a chat request", time: "Now", unread: 0 }]
         : []
     })
 
@@ -82,11 +89,7 @@ export default function MessagesScreen() {
     setConversations(prev =>
       prev.map(c => c.id === conv.id ? { ...c, unread: 0 } : c)
     )
-    if (conv.personId != null) {
-      navigation.navigate("ProfileDetail", { personId: conv.personId })
-    } else {
-      Alert.alert("Messages", "Conversation view coming soon.")
-    }
+    navigation.navigate("Chat", { personId: conv.personId, name: conv.name })
   }
 
   return (
@@ -98,7 +101,9 @@ export default function MessagesScreen() {
         <Text style={styles.brand}>Proximity</Text>
         <Text style={styles.title}>Messages</Text>
 
-        {allConversations.length === 0 ? (
+        {loading ? (
+          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+        ) : allConversations.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💬</Text>
             <Text style={styles.emptyTitle}>No conversations yet</Text>
@@ -108,12 +113,12 @@ export default function MessagesScreen() {
           </View>
         ) : (
           <View style={styles.list}>
-            {allConversations.map(conv => {
-              const av = getAvatar(conv.id)
+            {allConversations.map((conv, index) => {
+              const av = getAvatar(conv.personId)
               const isUnread = conv.unread > 0
               return (
                 <Pressable
-                  key={conv.id}
+                  key={conv.id ?? index}
                   style={styles.card}
                   onPress={() => openConversation(conv)}
                 >
@@ -177,6 +182,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#12101C",
     marginTop: -8,
+  },
+  loader: {
+    marginTop: 60,
   },
   list: {
     gap: 10,

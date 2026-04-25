@@ -12,7 +12,9 @@ import BasicsScreen from '../screens/BasicsScreen'
 import DoneScreen from '../screens/DoneScreen'
 import ProfileDetailScreen from '../screens/ProfileDetailScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
+import ChatScreen from '../screens/ChatScreen'
 import MainTabNavigator from './MainTabNavigator'
+import type { Person } from '../data/mockPeople'
 
 export type RootStackParamList = {
   Welcome: undefined
@@ -26,8 +28,9 @@ export type RootStackParamList = {
   Done: { mode: 'social' | 'professional' }
   Home: undefined
   MainTabs: undefined
-  ProfileDetail: { personId: number }
+  ProfileDetail: { personId: string; profile?: Person }
   EditProfile: undefined
+  Chat: { personId: string; name: string }
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -54,6 +57,7 @@ export default function RootNavigator() {
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
         <Stack.Screen name="ProfileDetail" component={ProfileDetailScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )

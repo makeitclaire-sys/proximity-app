@@ -1,33 +1,14 @@
-import { useState } from "react"
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Alert } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useState, useEffect, useCallback } from "react"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image } from "react-native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
-import { mockPeople } from "../data/mockPeople"
-import { useInteractions } from "../context/InteractionContext"
+import type { Person } from "../data/mockPeople"
+import { useUser } from "../context/UserContext"
+import { getProfiles } from "../services/profileService"
+import { getConnections, updateConnectionStatus, type Connection } from "../services/connectionService"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
-
-type Person = {
-  id: number
-  name: string
-  age: number
-  status: string
-}
-
-type SentEntry = Person & { badge: string }
-
-const PENDING: Person[] = [
-  { id: 10, name: "Jordan M.", age: 29, status: "UX lead at Figma" },
-  { id: 11, name: "Sam K.", age: 31, status: "Freelance photographer" },
-]
-
-const CONNECTIONS: Person[] = [
-  { id: 1, name: "Maya R.", age: 28, status: "New in town" },
-  { id: 14, name: "Chris L.", age: 33, status: "Software engineer" },
-]
-
-const ALL_PEOPLE: Person[] = [...PENDING, ...CONNECTIONS]
 
 const AVATAR_COLORS = [
   { bg: "rgba(255, 45, 135, 0.12)", fg: "#FF2D87" },
@@ -36,45 +17,155 @@ const AVATAR_COLORS = [
   { bg: "rgba(255, 159, 28, 0.12)", fg: "#FF9F1C" },
 ]
 
-const getAvatar = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length]
+function hashId(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) & 0x7fffffff
+  }
+  return h
+}
+
+const getAvatar = (id: string) => AVATAR_COLORS[hashId(id) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]
 const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("")
 
 export default function ConnectionsScreen() {
   const navigation = useNavigation<NavProp>()
-  const { hiRequests, chatRequests } = useInteractions()
+  const { profile: myProfile } = useUser()
+  const myId = myProfile.supabaseId
 
-  const [pendingIds, setPendingIds] = useState<Set<number>>(
-    new Set(PENDING.map(p => p.id))
-  )
-  const [acceptedIds, setAcceptedIds] = useState<Set<number>>(
-    new Set(CONNECTIONS.map(p => p.id))
-  )
+  const [connections, setConnections] = useState<Connection[]>([])
+  const [profileMap, setProfileMap] = useState<Map<number, Person>>(new Map())
+  const [loading, setLoading] = useState(true)
 
-  const accept = (id: number) => {
-    setPendingIds(prev => { const s = new Set(prev); s.delete(id); return s })
-    setAcceptedIds(prev => new Set(prev).add(id))
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const profiles = await getProfiles()
+      const map = new Map(profiles.map(p => [p.id, p]))
+      setProfileMap(map)
+
+      if (myId != null) {
+        const conns = await getConnections(myId)
+        setConnections(conns)
+      }
+    } catch {
+      // leave previous state
+    } finally {
+      setLoading(false)
+    }
+  }, [myId])
+
+  useFocusEffect(useCallback(() => { load() }, [load]))
+
+  const accept = async (conn: Connection) => {
+    setConnections(prev =>
+      prev.map(c => c.id === conn.id ? { ...c, status: "accepted" } : c)
+    )
+    try {
+      await updateConnectionStatus(conn.id, "accepted")
+    } catch {
+      setConnections(prev =>
+        prev.map(c => c.id === conn.id ? { ...c, status: "pending" } : c)
+      )
+    }
   }
 
-  const decline = (id: number) => {
-    setPendingIds(prev => { const s = new Set(prev); s.delete(id); return s })
+  const decline = async (conn: Connection) => {
+    setConnections(prev => prev.filter(c => c.id !== conn.id))
+    try {
+      await updateConnectionStatus(conn.id, "declined")
+    } catch {
+      setConnections(prev => [...prev, conn])
+    }
   }
 
-  const pendingPeople = PENDING.filter(p => pendingIds.has(p.id))
-  const acceptedPeople = ALL_PEOPLE.filter(p => acceptedIds.has(p.id))
+  const getOtherId = (conn: Connection) =>
+    conn.senderId === myId ? conn.receiverId : conn.senderId
 
-  const sentPeople: SentEntry[] = [
-    ...hiRequests.flatMap(id => {
-      const p = mockPeople.find(m => m.id === id)
-      return p ? [{ id: p.id, name: p.name, age: p.age, status: p.status, badge: "Hi sent" }] : []
-    }),
-    ...chatRequests.flatMap(id => {
-      const p = mockPeople.find(m => m.id === id)
-      return p ? [{ id: p.id, name: p.name, age: p.age, status: p.status, badge: "Chat sent" }] : []
-    }),
-  ]
+  const receivedPending = connections.filter(
+    c => c.receiverId === myId && c.status === "pending"
+  )
+  const sentPending = connections.filter(
+    c => c.senderId === myId && c.status === "pending"
+  )
+  const accepted = connections.filter(c => c.status === "accepted")
 
-  const goToProfile = (id: number) => {
-    navigation.navigate("ProfileDetail", { personId: id })
+  const isEmpty = !loading && receivedPending.length === 0 && sentPending.length === 0 && accepted.length === 0
+
+  const renderPersonCard = (conn: Connection, index: number, slot: "received" | "sent" | "accepted") => {
+    const otherId = getOtherId(conn)
+    const person = profileMap.get(otherId)
+    const av = getAvatar(otherId)
+    const name = person?.name ?? `User ${otherId}`
+    const initials = getInitials(name)
+
+    return (
+      <Pressable
+        key={conn.id ?? index}
+        style={styles.card}
+        onPress={() => person
+          ? navigation.navigate("ProfileDetail", { personId: otherId, profile: person })
+          : undefined
+        }
+      >
+        <View style={styles.cardRow}>
+          <View style={[styles.avatar, { backgroundColor: av.bg }]}>
+            {person?.avatarUrl ? (
+              <Image source={{ uri: person.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={[styles.avatarText, { color: av.fg }]}>{initials}</Text>
+            )}
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardName}>{name}{person?.age ? `, ${person.age}` : ""}</Text>
+            {person?.status ? <Text style={styles.cardStatus}>{person.status}</Text> : null}
+            <Text style={styles.connectionType}>
+              {conn.type === "hi" ? "👋 Said hi" : "💬 Chat request"}
+            </Text>
+          </View>
+          {slot === "sent" && (
+            <Text style={styles.awaitingBadge}>Awaiting</Text>
+          )}
+        </View>
+
+        {slot === "received" && (
+          <View style={styles.buttonRow}>
+            <Pressable style={styles.declineButton} onPress={() => decline(conn)}>
+              <Text style={styles.declineButtonText}>Decline</Text>
+            </Pressable>
+            <Pressable style={styles.acceptButton} onPress={() => accept(conn)}>
+              <Text style={styles.acceptButtonText}>Accept</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {slot === "accepted" && (
+          <Pressable
+            style={styles.messageButton}
+            onPress={() => navigation.navigate("Chat", { personId: otherId, name })}
+          >
+            <Text style={styles.messageButtonText}>Message</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    )
+  }
+
+  if (myId == null && !loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.brand}>Proximity</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🔗</Text>
+            <Text style={styles.emptyTitle}>Profile not linked</Text>
+            <Text style={styles.emptySubtitle}>
+              Set your Supabase profile ID in UserContext to see real connections.
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    )
   }
 
   return (
@@ -85,91 +176,39 @@ export default function ConnectionsScreen() {
       >
         <Text style={styles.brand}>Proximity</Text>
 
-        {pendingPeople.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>PENDING ({pendingPeople.length})</Text>
-            {pendingPeople.map(person => {
-              const av = getAvatar(person.id)
-              return (
-                <Pressable key={person.id} style={styles.card} onPress={() => goToProfile(person.id)}>
-                  <View style={styles.cardRow}>
-                    <View style={[styles.avatar, { backgroundColor: av.bg }]}>
-                      <Text style={[styles.avatarText, { color: av.fg }]}>
-                        {getInitials(person.name)}
-                      </Text>
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{person.name}, {person.age}</Text>
-                      <Text style={styles.cardStatus}>{person.status}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.buttonRow}>
-                    <Pressable style={styles.declineButton} onPress={() => decline(person.id)}>
-                      <Text style={styles.declineButtonText}>Decline</Text>
-                    </Pressable>
-                    <Pressable style={styles.acceptButton} onPress={() => accept(person.id)}>
-                      <Text style={styles.acceptButtonText}>Accept</Text>
-                    </Pressable>
-                  </View>
-                </Pressable>
-              )
-            })}
+        {loading ? (
+          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+        ) : isEmpty ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🤝</Text>
+            <Text style={styles.emptyTitle}>No connections yet.</Text>
+            <Text style={styles.emptySubtitle}>
+              Discover people nearby and say hi or start a chat.
+            </Text>
           </View>
-        )}
+        ) : (
+          <>
+            {receivedPending.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>REQUESTS ({receivedPending.length})</Text>
+                {receivedPending.map((conn, i) => renderPersonCard(conn, i, "received"))}
+              </View>
+            )}
 
-        {sentPeople.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>SENT ({sentPeople.length})</Text>
-            {sentPeople.map(person => {
-              const av = getAvatar(person.id)
-              return (
-                <Pressable key={person.id} style={styles.card} onPress={() => goToProfile(person.id)}>
-                  <View style={styles.cardRow}>
-                    <View style={[styles.avatar, { backgroundColor: av.bg }]}>
-                      <Text style={[styles.avatarText, { color: av.fg }]}>
-                        {getInitials(person.name)}
-                      </Text>
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{person.name}, {person.age}</Text>
-                      <Text style={styles.cardStatus}>{person.status}</Text>
-                    </View>
-                    <Text style={styles.awaitingBadge}>{person.badge}</Text>
-                  </View>
-                </Pressable>
-              )
-            })}
-          </View>
-        )}
+            {sentPending.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>SENT ({sentPending.length})</Text>
+                {sentPending.map((conn, i) => renderPersonCard(conn, i, "sent"))}
+              </View>
+            )}
 
-        {acceptedPeople.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>CONNECTIONS ({acceptedPeople.length})</Text>
-            {acceptedPeople.map(person => {
-              const av = getAvatar(person.id)
-              return (
-                <Pressable key={person.id} style={styles.card} onPress={() => goToProfile(person.id)}>
-                  <View style={styles.cardRow}>
-                    <View style={[styles.avatar, { backgroundColor: av.bg }]}>
-                      <Text style={[styles.avatarText, { color: av.fg }]}>
-                        {getInitials(person.name)}
-                      </Text>
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{person.name}, {person.age}</Text>
-                      <Text style={styles.cardStatus}>{person.status}</Text>
-                    </View>
-                  </View>
-                  <Pressable
-                    style={styles.messageButton}
-                    onPress={() => Alert.alert("Message", `Messaging ${person.name} is coming soon.`)}
-                  >
-                    <Text style={styles.messageButtonText}>Message</Text>
-                  </Pressable>
-                </Pressable>
-              )
-            })}
-          </View>
+            {accepted.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>CONNECTIONS ({accepted.length})</Text>
+                {accepted.map((conn, i) => renderPersonCard(conn, i, "accepted"))}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -191,6 +230,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: "#12101C",
+  },
+  loader: {
+    marginTop: 60,
   },
   section: {
     gap: 12,
@@ -218,8 +260,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
   },
   avatarText: {
     fontSize: 16,
@@ -237,6 +285,11 @@ const styles = StyleSheet.create({
   cardStatus: {
     fontSize: 13,
     color: "#4A4458",
+  },
+  connectionType: {
+    fontSize: 12,
+    color: "#A8A3B8",
+    marginTop: 2,
   },
   buttonRow: {
     flexDirection: "row",
@@ -272,6 +325,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: "#A8A3B8",
+    flexShrink: 0,
   },
   messageButton: {
     paddingVertical: 10,
@@ -283,5 +337,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingTop: 80,
+    gap: 12,
+  },
+  emptyEmoji: {
+    fontSize: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#12101C",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#4A4458",
+    textAlign: "center",
+    maxWidth: 260,
   },
 })

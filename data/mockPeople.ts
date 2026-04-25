@@ -1,19 +1,23 @@
 export type Person = {
-  id: number
+  id: string
   name: string
   age: number
-  status: string
-  distance: string
   bio: string
   interests: string[]
-  starters: string[]
   talkTopics: string[]
   avoidTopics: string[]
+  mode?: "social" | "professional"
+  isVisible?: boolean
+  avatarUrl?: string
+  // fields present in mock data but not required from Supabase
+  status?: string
+  distance?: string
+  starters?: string[]
 }
 
 export const mockPeople: Person[] = [
   {
-    id: 1,
+    id: "1",
     name: "Maya R.",
     age: 28,
     status: "New in town",
@@ -36,7 +40,7 @@ export const mockPeople: Person[] = [
     ],
   },
   {
-    id: 2,
+    id: "2",
     name: "Daniel K.",
     age: 34,
     status: "Founder, seed-stage",
@@ -59,7 +63,7 @@ export const mockPeople: Person[] = [
     ],
   },
   {
-    id: 3,
+    id: "3",
     name: "Priya S.",
     age: 26,
     status: "PhD candidate",
@@ -82,7 +86,7 @@ export const mockPeople: Person[] = [
     ],
   },
   {
-    id: 10,
+    id: "10",
     name: "Jordan M.",
     age: 29,
     status: "UX lead at Figma",
@@ -105,7 +109,7 @@ export const mockPeople: Person[] = [
     ],
   },
   {
-    id: 14,
+    id: "14",
     name: "Chris L.",
     age: 33,
     status: "Software engineer",

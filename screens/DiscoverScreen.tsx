@@ -3,7 +3,6 @@ import { SafeAreaView, View, Text, Pressable, StyleSheet, ScrollView, ActivityIn
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
-import { mockPeople } from "../data/mockPeople"
 import type { Person } from "../data/mockPeople"
 import { useInteractions } from "../context/InteractionContext"
 import { useUser } from "../context/UserContext"
@@ -16,18 +15,18 @@ export default function DiscoverScreen() {
   const { hiddenUsers } = useInteractions()
   const { profile } = useUser()
 
-  const [supabaseProfiles, setSupabaseProfiles] = useState<Person[] | null>(null)
+  const [profiles, setProfiles] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
 
     getProfiles()
-      .then(profiles => {
-        if (!cancelled) setSupabaseProfiles(profiles)
+      .then(data => {
+        if (!cancelled) setProfiles(data)
       })
       .catch(() => {
-        if (!cancelled) setSupabaseProfiles(null)
+        if (!cancelled) setProfiles([])
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -36,19 +35,13 @@ export default function DiscoverScreen() {
     return () => { cancelled = true }
   }, [])
 
-  const sourceProfiles = supabaseProfiles ?? mockPeople
-  const visiblePeople = sourceProfiles.filter(p => !hiddenUsers.includes(p.id))
+  const visiblePeople = profiles.filter(p => !hiddenUsers.includes(p.id))
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.brand}>Proximity</Text>
         <Text style={styles.title}>Nearby people</Text>
-        <Text style={styles.subtitle}>
-          {supabaseProfiles
-            ? "People nearby right now."
-            : "These are demo profiles. Later, this will load real users from Supabase."}
-        </Text>
 
         {!profile.isVisible && (
           <View style={styles.invisibleBanner}>
@@ -63,22 +56,34 @@ export default function DiscoverScreen() {
         ) : visiblePeople.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>👀</Text>
-            <Text style={styles.emptyTitle}>All caught up</Text>
-            <Text style={styles.emptySubtitle}>
-              No one else nearby right now. Check back later.
-            </Text>
+            <Text style={styles.emptyTitle}>No people nearby right now.</Text>
+            <Text style={styles.emptySubtitle}>Check back soon.</Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {visiblePeople.map((person) => (
+            {visiblePeople.map((person, index) => (
               <Pressable
-                key={person.id}
+                key={person.id ?? index}
                 style={styles.card}
-                onPress={() => navigation.navigate("ProfileDetail", { personId: person.id })}
+                onPress={() => navigation.navigate("ProfileDetail", { personId: person.id, profile: person })}
               >
-                <Text style={styles.name}>{person.name}, {person.age}</Text>
-                <Text style={styles.status}>{person.status}</Text>
-                <Text style={styles.distance}>{person.distance}</Text>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.name}>{person.name}, {person.age}</Text>
+                  {person.distance ? <Text style={styles.distance}>{person.distance}</Text> : null}
+                </View>
+                {person.status ? <Text style={styles.status}>{person.status}</Text> : null}
+                {person.bio ? (
+                  <Text style={styles.bio} numberOfLines={2}>{person.bio}</Text>
+                ) : null}
+                {person.interests.length > 0 && (
+                  <View style={styles.chips}>
+                    {person.interests.slice(0, 3).map((interest, i) => (
+                      <View key={`${interest}-${i}`} style={styles.chip}>
+                        <Text style={styles.chipText}>{interest}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -108,12 +113,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#12101C",
   },
-  subtitle: {
-    marginTop: 10,
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#4A4458",
-  },
   loader: {
     marginTop: 60,
   },
@@ -127,7 +126,12 @@ const styles = StyleSheet.create({
     borderColor: "#EEEBF2",
     borderRadius: 22,
     padding: 18,
-    gap: 4,
+    gap: 6,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   name: {
     fontSize: 18,
@@ -135,12 +139,34 @@ const styles = StyleSheet.create({
     color: "#12101C",
   },
   status: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#4A4458",
   },
   distance: {
     fontSize: 12,
     color: "#A8A3B8",
+  },
+  bio: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#4A4458",
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+  },
+  chip: {
+    backgroundColor: "#F4F3F7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  chipText: {
+    fontSize: 11,
+    color: "#4A4458",
+    fontWeight: "500",
   },
   invisibleBanner: {
     backgroundColor: "rgba(255, 159, 28, 0.1)",
@@ -172,6 +198,5 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: "#4A4458",
     textAlign: "center",
-    maxWidth: 260,
   },
 })

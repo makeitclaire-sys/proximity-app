@@ -1,68 +1,124 @@
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useState, useEffect } from 'react'
+import { View, Text, Pressable, ScrollView, StyleSheet, Image } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
 import { mockPeople } from '../data/mockPeople'
 import { useInteractions } from '../context/InteractionContext'
+import { useUser } from '../context/UserContext'
 import { supabaseProfilesCache } from '../services/profileService'
+import { createConnection, getConnectionWith, type Connection } from '../services/connectionService'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileDetail'>
 
 const AVATAR_COLORS = [
-  { bg: 'rgba(255, 45, 135, 0.12)', fg: '#FF2D87' },
-  { bg: 'rgba(79, 70, 229, 0.12)',  fg: '#4F46E5' },
-  { bg: 'rgba(6, 214, 160, 0.12)',  fg: '#06D6A0' },
+  { bg: '#2D1B4E', fg: '#C084FC' },
+  { bg: '#1B2D4E', fg: '#60A5FA' },
+  { bg: '#1B4E2D', fg: '#4ADE80' },
 ]
 
+function hashId(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) & 0x7fffffff
+  }
+  return h
+}
+
 export default function ProfileDetailScreen({ navigation, route }: Props) {
-  const person = mockPeople.find(p => p.id === route.params.personId)
+  const person = route.params.profile
+    ?? mockPeople.find(p => p.id === route.params.personId)
     ?? supabaseProfilesCache.get(route.params.personId)
   const { hiRequests, chatRequests, sendHi, sendChat, hideUser } = useInteractions()
+  const { profile: myProfile } = useUser()
+  const myId = myProfile.supabaseId
+  const insets = useSafeAreaInsets()
+
+  const [connection, setConnection] = useState<Connection | null>(null)
+
+  useEffect(() => {
+    if (myId == null || !person?.id) return
+    getConnectionWith(myId, person.id).then(setConnection).catch(() => {})
+  }, [myId, person?.id])
 
   if (!person) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.content}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
-          </Pressable>
-          <Text style={styles.errorText}>Profile not found.</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.errorBack}>
+          <Text style={styles.errorBackText}>← Back</Text>
+        </Pressable>
+        <Text style={styles.errorText}>Profile not found.</Text>
+      </View>
     )
   }
 
-  const avatarColor = AVATAR_COLORS[(person.id - 1) % AVATAR_COLORS.length]
+  const avatarColor = AVATAR_COLORS[hashId(person.id) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]
   const initials = person.name.split(' ').map(p => p[0]).join('')
-  const sentHi = hiRequests.includes(person.id)
-  const sentChat = chatRequests.includes(person.id)
+
+  const sentHi = hiRequests.includes(person.id) || connection?.type === "hi"
+  const sentChat = chatRequests.includes(person.id) || connection?.type === "chat"
   const actionTaken = sentHi || sentChat
 
+  const handleSendHi = () => {
+    sendHi(person.id)
+    if (myId != null) {
+      createConnection(myId, person.id, "hi")
+        .then(() => setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", createdAt: "" }))
+        .catch(() => {})
+    }
+  }
+
+  const handleSendChat = () => {
+    sendChat(person.id)
+    navigation.navigate("Chat", { personId: person.id, name: person.name })
+    if (myId != null) {
+      createConnection(myId, person.id, "chat").catch(() => {})
+    }
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.content}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 80 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Full-width hero ── */}
+        <View style={styles.hero}>
+          {person.avatarUrl ? (
+            <Image
+              source={{ uri: person.avatarUrl }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: avatarColor.bg, justifyContent: 'center', alignItems: 'center' }]}>
+              <Text style={[styles.heroInitials, { color: avatarColor.fg }]}>{initials}</Text>
+            </View>
+          )}
 
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.profileHeader}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
-              <Text style={[styles.avatarText, { color: avatarColor.fg }]}>{initials}</Text>
+          {/* Dark tint over whole image, heavier band at the bottom for readability */}
+          <View style={styles.heroOverlayFull} />
+          <View style={styles.heroOverlayBottom} />
+
+          {/* Name + meta pinned to bottom of hero */}
+          <View style={[styles.heroContent, { paddingBottom: 20 }]}>
+            <Text style={styles.heroName}>{person.name}, {person.age}</Text>
+            <View style={styles.heroMetaRow}>
+              {person.distance ? (
+                <View style={styles.heroChip}>
+                  <Text style={styles.heroChipText}>📍 {person.distance}</Text>
+                </View>
+              ) : null}
+              {person.status ? (
+                <Text style={styles.heroStatus}>{person.status}</Text>
+              ) : null}
             </View>
-            <Text style={styles.name}>{person.name}, {person.age}</Text>
-            <View style={styles.chipRow}>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>📍 {person.distance}</Text>
-              </View>
-            </View>
-            <Text style={styles.status}>{person.status}</Text>
           </View>
+        </View>
 
+        {/* ── Profile sections ── */}
+        <View style={styles.sections}>
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>ABOUT</Text>
             <Text style={styles.bio}>{person.bio}</Text>
@@ -71,30 +127,32 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>INTERESTS</Text>
             <View style={styles.interestsRow}>
-              {person.interests.map((interest) => (
-                <View key={interest} style={styles.interestChip}>
+              {(person.interests || []).map((interest, i) => (
+                <View key={`interest-${i}`} style={styles.interestChip}>
                   <Text style={styles.interestText}>{interest}</Text>
                 </View>
               ))}
             </View>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>START A CONVERSATION</Text>
-            <View style={styles.starterList}>
-              {person.starters.map((starter, i) => (
-                <View key={i} style={styles.starterCard}>
-                  <Text style={styles.starterText}>"{starter}"</Text>
-                </View>
-              ))}
+          {(person.starters || []).length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>START A CONVERSATION</Text>
+              <View style={styles.starterList}>
+                {(person.starters || []).map((starter, i) => (
+                  <View key={`starter-${i}`} style={styles.starterCard}>
+                    <Text style={styles.starterText}>"{starter}"</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>TALK TO ME ABOUT</Text>
             <View style={styles.topicList}>
-              {person.talkTopics?.map((topic, i) => (
-                <Text key={i} style={styles.topicItem}>· {topic}</Text>
+              {(person.talkTopics || []).map((topic, i) => (
+                <Text key={`talk-${i}`} style={styles.topicItem}>· {topic}</Text>
               ))}
             </View>
           </View>
@@ -102,63 +160,68 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, styles.sectionLabelMuted]}>DON'T TALK TO ME ABOUT</Text>
             <View style={styles.topicList}>
-              {person.avoidTopics?.map((topic, i) => (
-                <Text key={i} style={styles.avoidTopicItem}>· {topic}</Text>
+              {(person.avoidTopics || []).map((topic, i) => (
+                <Text key={`avoid-${i}`} style={styles.avoidTopicItem}>· {topic}</Text>
               ))}
             </View>
           </View>
-        </ScrollView>
+        </View>
+      </ScrollView>
 
-        <View style={styles.footer}>
-          {actionTaken ? (
-            <View style={styles.sentPill}>
-              <Text style={styles.sentPillText}>
-                {sentHi ? "Hi request sent" : "Chat request sent"}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.footerActions}>
-              <View style={styles.primaryActions}>
-                <Pressable style={styles.actionButton} onPress={() => sendHi(person.id)}>
-                  <Text style={styles.actionButtonText}>Come say hi</Text>
-                </Pressable>
-                <Pressable style={styles.actionButton} onPress={() => sendChat(person.id)}>
-                  <Text style={styles.actionButtonText}>Let's chat</Text>
-                </Pressable>
-              </View>
-              <Pressable
-                style={styles.notInterestedButton}
-                onPress={() => {
-                  hideUser(person.id)
-                  navigation.goBack()
-                }}
-              >
-                <Text style={styles.notInterestedText}>Not interested</Text>
+      {/* ── Floating back button ── */}
+      <Pressable
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        hitSlop={8}
+      >
+        <Text style={styles.backText}>← Back</Text>
+      </Pressable>
+
+      {/* ── Footer actions ── */}
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {actionTaken ? (
+          <View style={styles.sentPill}>
+            <Text style={styles.sentPillText}>
+              {sentHi ? "Hi request sent" : "Chat request sent"}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.footerActions}>
+            <View style={styles.primaryActions}>
+              <Pressable style={styles.actionButton} onPress={handleSendHi}>
+                <Text style={styles.actionButtonText}>Come say hi</Text>
+              </Pressable>
+              <Pressable style={styles.actionButton} onPress={handleSendChat}>
+                <Text style={styles.actionButtonText}>Let's chat</Text>
               </Pressable>
             </View>
-          )}
-        </View>
+            <Pressable
+              style={styles.notInterestedButton}
+              onPress={() => { hideUser(person.id); navigation.goBack() }}
+            >
+              <Text style={styles.notInterestedText}>Not interested</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+
   container: {
     flex: 1,
     backgroundColor: '#FAFAFB',
   },
-  content: {
-    flex: 1,
+
+  // Error state
+  errorBack: {
     paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
     paddingVertical: 12,
   },
-  backText: {
+  errorBackText: {
     fontSize: 16,
     color: '#12101C',
     fontWeight: '500',
@@ -166,58 +229,98 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#4A4458',
-    marginTop: 24,
-  },
-  scrollContent: {
-    paddingTop: 8,
-    paddingBottom: 24,
-    gap: 28,
+    marginTop: 12,
+    paddingHorizontal: 24,
   },
 
-  // Header
-  profileHeader: {
-    gap: 8,
+  // Scroll
+  scrollContent: {
+    // paddingBottom set inline to incorporate safe area + footer height
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
+
+  // ── Hero ──
+  hero: {
+    width: '100%',
+    height: 330,
+    overflow: 'hidden',
+    backgroundColor: '#1B1B2E',
   },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  name: {
-    fontSize: 28,
+  heroInitials: {
+    fontSize: 80,
     fontWeight: '800',
-    color: '#12101C',
-    lineHeight: 34,
+    letterSpacing: -2,
   },
-  chipRow: {
+  heroOverlayFull: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+  heroOverlayBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 180,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 22,
+    gap: 6,
+  },
+  heroName: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    lineHeight: 36,
+    letterSpacing: -0.3,
+  },
+  heroMetaRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
   },
-  chip: {
-    backgroundColor: '#EEEBF2',
+  heroChip: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 999,
   },
-  chipText: {
+  heroChipText: {
     fontSize: 12,
-    color: '#4A4458',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
-  status: {
-    fontSize: 15,
-    color: '#4A4458',
-    lineHeight: 22,
+  heroStatus: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '400',
   },
 
-  // Sections
+  // ── Floating back button ──
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  backText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+
+  // ── Sections ──
+  sections: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    gap: 28,
+  },
   section: {
     gap: 10,
   },
@@ -226,6 +329,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#12101C',
     letterSpacing: 1,
+  },
+  sectionLabelMuted: {
+    color: '#A8A3B8',
   },
   bio: {
     fontSize: 15,
@@ -251,10 +357,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#4A4458',
     fontWeight: '500',
-  },
-
-  sectionLabelMuted: {
-    color: '#A8A3B8',
   },
 
   // Topics
@@ -290,47 +392,55 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Footer
+  // ── Footer ──
   footer: {
-    paddingTop: 10,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    backgroundColor: '#FAFAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#EEEBF2',
   },
   footerActions: {
     gap: 10,
   },
   primaryActions: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 8,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: "#12101C",
+    backgroundColor: '#12101C',
     paddingVertical: 14,
     borderRadius: 999,
-    alignItems: "center",
+    alignItems: 'center',
   },
   actionButtonText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   notInterestedButton: {
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 6,
   },
   notInterestedText: {
     fontSize: 14,
-    color: "#A8A3B8",
-    fontWeight: "500",
+    color: '#A8A3B8',
+    fontWeight: '500',
   },
   sentPill: {
-    backgroundColor: "#F4F3F7",
+    backgroundColor: '#F4F3F7',
     borderRadius: 999,
     paddingVertical: 14,
-    alignItems: "center",
+    alignItems: 'center',
   },
   sentPillText: {
     fontSize: 14,
-    color: "#A8A3B8",
-    fontWeight: "500",
+    color: '#A8A3B8',
+    fontWeight: '500',
   },
 })

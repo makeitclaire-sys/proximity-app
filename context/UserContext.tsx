@@ -10,6 +10,8 @@ export type UserProfile = {
   avoidTopics: string[]
   mode: "social" | "professional"
   isVisible: boolean
+  supabaseId: string | null
+  avatarUrl: string | null
 }
 
 type UserContextType = {
@@ -36,6 +38,8 @@ const DEFAULT_PROFILE: UserProfile = {
   ],
   mode: "social",
   isVisible: true,
+  supabaseId: null,
+  avatarUrl: null,
 }
 
 const UserContext = createContext<UserContextType | null>(null)

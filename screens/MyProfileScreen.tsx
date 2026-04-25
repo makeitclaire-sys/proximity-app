@@ -1,4 +1,4 @@
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Switch } from "react-native"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert, Image } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
@@ -17,17 +17,37 @@ export default function MyProfileScreen() {
   const accent = MODE_ACCENT[profile.mode]
   const initials = profile.name.split(" ").map(p => p[0]).join("")
 
+  const openSettings = () => {
+    Alert.alert("Settings", undefined, [
+      { text: "Edit Profile", onPress: () => navigation.navigate("EditProfile") },
+      {
+        text: profile.isVisible ? "Go invisible" : "Go visible",
+        onPress: toggleVisibility,
+      },
+      { text: "Cancel", style: "cancel" },
+    ])
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.brand}>Proximity</Text>
+        <View style={styles.brandRow}>
+          <Text style={styles.brand}>Proximity</Text>
+          <Pressable onPress={openSettings} style={styles.settingsButton} hitSlop={8}>
+            <Text style={styles.settingsIcon}>•••</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.profileHeader}>
           <View style={[styles.avatar, { backgroundColor: accent + "20" }]}>
-            <Text style={[styles.avatarText, { color: accent }]}>{initials}</Text>
+            {profile.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={[styles.avatarText, { color: accent }]}>{initials}</Text>
+            )}
           </View>
           <Text style={styles.name}>{profile.name}, {profile.age}</Text>
         </View>
@@ -133,10 +153,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: 28,
   },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   brand: {
     fontSize: 22,
     fontWeight: "700",
     color: "#12101C",
+  },
+  settingsButton: {
+    padding: 4,
+  },
+  settingsIcon: {
+    fontSize: 18,
+    color: "#4A4458",
+    letterSpacing: 1,
   },
 
   // Header
@@ -147,8 +180,13 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
   },
   avatarText: {
     fontSize: 28,
