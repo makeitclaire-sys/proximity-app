@@ -3,6 +3,8 @@ import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Alert } fr
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
+import { mockPeople } from "../data/mockPeople"
+import { useInteractions } from "../context/InteractionContext"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
@@ -62,7 +64,19 @@ const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("")
 
 export default function MessagesScreen() {
   const navigation = useNavigation<NavProp>()
+  const { chatRequests } = useInteractions()
   const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS)
+
+  const chatConvos: Conversation[] = chatRequests
+    .filter(id => !INITIAL_CONVERSATIONS.some(c => c.personId === id))
+    .flatMap(id => {
+      const p = mockPeople.find(m => m.id === id)
+      return p
+        ? [{ id: id + 1000, personId: id, name: p.name, lastMessage: "You sent a chat request", time: "Now", unread: 0 }]
+        : []
+    })
+
+  const allConversations = [...chatConvos, ...conversations]
 
   const openConversation = (conv: Conversation) => {
     setConversations(prev =>
@@ -84,7 +98,7 @@ export default function MessagesScreen() {
         <Text style={styles.brand}>Proximity</Text>
         <Text style={styles.title}>Messages</Text>
 
-        {conversations.length === 0 ? (
+        {allConversations.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💬</Text>
             <Text style={styles.emptyTitle}>No conversations yet</Text>
@@ -94,7 +108,7 @@ export default function MessagesScreen() {
           </View>
         ) : (
           <View style={styles.list}>
-            {conversations.map(conv => {
+            {allConversations.map(conv => {
               const av = getAvatar(conv.id)
               const isUnread = conv.unread > 0
               return (
@@ -164,8 +178,6 @@ const styles = StyleSheet.create({
     color: "#12101C",
     marginTop: -8,
   },
-
-  // List
   list: {
     gap: 10,
   },
@@ -180,8 +192,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-
-  // Avatar
   avatar: {
     width: 46,
     height: 46,
@@ -194,8 +204,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-
-  // Row content
   middle: {
     flex: 1,
     gap: 4,
@@ -232,8 +240,6 @@ const styles = StyleSheet.create({
   previewUnread: {
     color: "#4A4458",
   },
-
-  // Unread badge
   badge: {
     minWidth: 20,
     height: 20,
@@ -249,8 +255,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-
-  // Empty state
   emptyState: {
     flex: 1,
     alignItems: "center",

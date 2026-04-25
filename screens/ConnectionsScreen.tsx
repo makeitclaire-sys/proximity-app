@@ -3,6 +3,8 @@ import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Alert } fr
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
+import { mockPeople } from "../data/mockPeople"
+import { useInteractions } from "../context/InteractionContext"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
@@ -13,13 +15,11 @@ type Person = {
   status: string
 }
 
+type SentEntry = Person & { badge: string }
+
 const PENDING: Person[] = [
   { id: 10, name: "Jordan M.", age: 29, status: "UX lead at Figma" },
   { id: 11, name: "Sam K.", age: 31, status: "Freelance photographer" },
-]
-
-const SENT: Person[] = [
-  { id: 12, name: "Riya P.", age: 25, status: "Startup founder" },
 ]
 
 const CONNECTIONS: Person[] = [
@@ -27,7 +27,7 @@ const CONNECTIONS: Person[] = [
   { id: 14, name: "Chris L.", age: 33, status: "Software engineer" },
 ]
 
-const ALL_PEOPLE: Person[] = [...PENDING, ...SENT, ...CONNECTIONS]
+const ALL_PEOPLE: Person[] = [...PENDING, ...CONNECTIONS]
 
 const AVATAR_COLORS = [
   { bg: "rgba(255, 45, 135, 0.12)", fg: "#FF2D87" },
@@ -41,6 +41,8 @@ const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("")
 
 export default function ConnectionsScreen() {
   const navigation = useNavigation<NavProp>()
+  const { hiRequests, chatRequests } = useInteractions()
+
   const [pendingIds, setPendingIds] = useState<Set<number>>(
     new Set(PENDING.map(p => p.id))
   )
@@ -59,6 +61,17 @@ export default function ConnectionsScreen() {
 
   const pendingPeople = PENDING.filter(p => pendingIds.has(p.id))
   const acceptedPeople = ALL_PEOPLE.filter(p => acceptedIds.has(p.id))
+
+  const sentPeople: SentEntry[] = [
+    ...hiRequests.flatMap(id => {
+      const p = mockPeople.find(m => m.id === id)
+      return p ? [{ id: p.id, name: p.name, age: p.age, status: p.status, badge: "Hi sent" }] : []
+    }),
+    ...chatRequests.flatMap(id => {
+      const p = mockPeople.find(m => m.id === id)
+      return p ? [{ id: p.id, name: p.name, age: p.age, status: p.status, badge: "Chat sent" }] : []
+    }),
+  ]
 
   const goToProfile = (id: number) => {
     navigation.navigate("ProfileDetail", { personId: id })
@@ -104,10 +117,10 @@ export default function ConnectionsScreen() {
           </View>
         )}
 
-        {SENT.length > 0 && (
+        {sentPeople.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>SENT ({SENT.length})</Text>
-            {SENT.map(person => {
+            <Text style={styles.sectionTitle}>SENT ({sentPeople.length})</Text>
+            {sentPeople.map(person => {
               const av = getAvatar(person.id)
               return (
                 <Pressable key={person.id} style={styles.card} onPress={() => goToProfile(person.id)}>
@@ -121,7 +134,7 @@ export default function ConnectionsScreen() {
                       <Text style={styles.cardName}>{person.name}, {person.age}</Text>
                       <Text style={styles.cardStatus}>{person.status}</Text>
                     </View>
-                    <Text style={styles.awaitingBadge}>Awaiting</Text>
+                    <Text style={styles.awaitingBadge}>{person.badge}</Text>
                   </View>
                 </Pressable>
               )
@@ -179,8 +192,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#12101C",
   },
-
-  // Section
   section: {
     gap: 12,
   },
@@ -190,8 +201,6 @@ const styles = StyleSheet.create({
     color: "#A8A3B8",
     letterSpacing: 1,
   },
-
-  // Card
   card: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -229,8 +238,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#4A4458",
   },
-
-  // Pending buttons
   buttonRow: {
     flexDirection: "row",
     gap: 8,
@@ -261,15 +268,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-
-  // Sent
   awaitingBadge: {
     fontSize: 12,
     fontWeight: "500",
     color: "#A8A3B8",
   },
-
-  // Connections
   messageButton: {
     paddingVertical: 10,
     borderRadius: 999,

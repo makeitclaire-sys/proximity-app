@@ -1,23 +1,43 @@
-import { useState } from 'react'
-import { SafeAreaView, View, Text, Pressable, StyleSheet, ScrollView } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { RootStackParamList } from '../navigation/RootNavigator'
-import { mockPeople } from '../data/mockPeople'
+import { useState, useEffect } from "react"
+import { SafeAreaView, View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
+import { useNavigation } from "@react-navigation/native"
+import { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { RootStackParamList } from "../navigation/RootNavigator"
+import { mockPeople } from "../data/mockPeople"
+import type { Person } from "../data/mockPeople"
+import { useInteractions } from "../context/InteractionContext"
+import { useUser } from "../context/UserContext"
+import { getProfiles } from "../services/profileService"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
-type Action = 'hi' | 'chat'
 
 export default function DiscoverScreen() {
   const navigation = useNavigation<NavProp>()
-  const [actions, setActions] = useState<Record<number, Action>>({})
-  const [hidden, setHidden] = useState<Set<number>>(new Set())
+  const { hiddenUsers } = useInteractions()
+  const { profile } = useUser()
 
-  const sendHi = (id: number) => setActions(prev => ({ ...prev, [id]: 'hi' }))
-  const sendChat = (id: number) => setActions(prev => ({ ...prev, [id]: 'chat' }))
-  const notInterested = (id: number) => setHidden(prev => new Set(prev).add(id))
+  const [supabaseProfiles, setSupabaseProfiles] = useState<Person[] | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const visiblePeople = mockPeople.filter(p => !hidden.has(p.id))
+  useEffect(() => {
+    let cancelled = false
+
+    getProfiles()
+      .then(profiles => {
+        if (!cancelled) setSupabaseProfiles(profiles)
+      })
+      .catch(() => {
+        if (!cancelled) setSupabaseProfiles(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
+  const sourceProfiles = supabaseProfiles ?? mockPeople
+  const visiblePeople = sourceProfiles.filter(p => !hiddenUsers.includes(p.id))
 
   return (
     <SafeAreaView style={styles.container}>
@@ -25,10 +45,22 @@ export default function DiscoverScreen() {
         <Text style={styles.brand}>Proximity</Text>
         <Text style={styles.title}>Nearby people</Text>
         <Text style={styles.subtitle}>
-          These are demo profiles. Later, this will load real users from Supabase.
+          {supabaseProfiles
+            ? "People nearby right now."
+            : "These are demo profiles. Later, this will load real users from Supabase."}
         </Text>
 
-        {visiblePeople.length === 0 ? (
+        {!profile.isVisible && (
+          <View style={styles.invisibleBanner}>
+            <Text style={styles.invisibleBannerText}>
+              You are invisible. Others cannot see you.
+            </Text>
+          </View>
+        )}
+
+        {loading ? (
+          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+        ) : visiblePeople.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>👀</Text>
             <Text style={styles.emptyTitle}>All caught up</Text>
@@ -38,43 +70,17 @@ export default function DiscoverScreen() {
           </View>
         ) : (
           <View style={styles.list}>
-            {visiblePeople.map((person) => {
-              const action = actions[person.id]
-              return (
-                <View key={person.id} style={styles.card}>
-                  <Pressable
-                    style={styles.profileArea}
-                    onPress={() => navigation.navigate("ProfileDetail", { personId: person.id })}
-                  >
-                    <Text style={styles.name}>{person.name}, {person.age}</Text>
-                    <Text style={styles.status}>{person.status}</Text>
-                    <Text style={styles.distance}>{person.distance}</Text>
-                  </Pressable>
-
-                  {action ? (
-                    <View style={styles.sentPill}>
-                      <Text style={styles.sentPillText}>
-                        {action === "hi" ? "Hi sent" : "Chat request sent"}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.actionsArea}>
-                      <View style={styles.primaryActions}>
-                        <Pressable style={styles.actionButton} onPress={() => sendHi(person.id)}>
-                          <Text style={styles.actionButtonText}>Come say hi</Text>
-                        </Pressable>
-                        <Pressable style={styles.actionButton} onPress={() => sendChat(person.id)}>
-                          <Text style={styles.actionButtonText}>Let's chat</Text>
-                        </Pressable>
-                      </View>
-                      <Pressable style={styles.notInterestedButton} onPress={() => notInterested(person.id)}>
-                        <Text style={styles.notInterestedText}>Not interested</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
-              )
-            })}
+            {visiblePeople.map((person) => (
+              <Pressable
+                key={person.id}
+                style={styles.card}
+                onPress={() => navigation.navigate("ProfileDetail", { personId: person.id })}
+              >
+                <Text style={styles.name}>{person.name}, {person.age}</Text>
+                <Text style={styles.status}>{person.status}</Text>
+                <Text style={styles.distance}>{person.distance}</Text>
+              </Pressable>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -108,6 +114,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: "#4A4458",
   },
+  loader: {
+    marginTop: 60,
+  },
   list: {
     marginTop: 24,
     gap: 14,
@@ -118,9 +127,6 @@ const styles = StyleSheet.create({
     borderColor: "#EEEBF2",
     borderRadius: 22,
     padding: 18,
-    gap: 16,
-  },
-  profileArea: {
     gap: 4,
   },
   name: {
@@ -136,51 +142,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#A8A3B8",
   },
-
-  // Action states
-  actionsArea: {
-    gap: 10,
+  invisibleBanner: {
+    backgroundColor: "rgba(255, 159, 28, 0.1)",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
   },
-  primaryActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: "#12101C",
-    paddingVertical: 12,
-    borderRadius: 999,
-    alignItems: "center",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
+  invisibleBannerText: {
     fontSize: 13,
-    fontWeight: "600",
-  },
-  notInterestedButton: {
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  notInterestedText: {
-    fontSize: 13,
-    color: "#A8A3B8",
+    color: "#FF9F1C",
     fontWeight: "500",
+    textAlign: "center",
   },
-
-  // Sent pill
-  sentPill: {
-    backgroundColor: "#F4F3F7",
-    borderRadius: 999,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  sentPillText: {
-    fontSize: 13,
-    color: "#A8A3B8",
-    fontWeight: "500",
-  },
-
-  // Empty state
   emptyState: {
     alignItems: "center",
     paddingTop: 80,

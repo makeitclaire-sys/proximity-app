@@ -1,9 +1,10 @@
-import { useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
 import { mockPeople } from '../data/mockPeople'
+import { useInteractions } from '../context/InteractionContext'
+import { supabaseProfilesCache } from '../services/profileService'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileDetail'>
 
@@ -15,7 +16,8 @@ const AVATAR_COLORS = [
 
 export default function ProfileDetailScreen({ navigation, route }: Props) {
   const person = mockPeople.find(p => p.id === route.params.personId)
-  const [sent, setSent] = useState(false)
+    ?? supabaseProfilesCache.get(route.params.personId)
+  const { hiRequests, chatRequests, sendHi, sendChat, hideUser } = useInteractions()
 
   if (!person) {
     return (
@@ -32,6 +34,9 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const avatarColor = AVATAR_COLORS[(person.id - 1) % AVATAR_COLORS.length]
   const initials = person.name.split(' ').map(p => p[0]).join('')
+  const sentHi = hiRequests.includes(person.id)
+  const sentChat = chatRequests.includes(person.id)
+  const actionTaken = sentHi || sentChat
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -84,18 +89,54 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
               ))}
             </View>
           </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>TALK TO ME ABOUT</Text>
+            <View style={styles.topicList}>
+              {person.talkTopics?.map((topic, i) => (
+                <Text key={i} style={styles.topicItem}>· {topic}</Text>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelMuted]}>DON'T TALK TO ME ABOUT</Text>
+            <View style={styles.topicList}>
+              {person.avoidTopics?.map((topic, i) => (
+                <Text key={i} style={styles.avoidTopicItem}>· {topic}</Text>
+              ))}
+            </View>
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
-          <Pressable
-            style={[styles.connectButton, sent && styles.connectButtonSent]}
-            onPress={() => setSent(true)}
-            disabled={sent}
-          >
-            <Text style={[styles.connectButtonText, sent && styles.connectButtonTextSent]}>
-              {sent ? 'Request sent' : 'Connect'}
-            </Text>
-          </Pressable>
+          {actionTaken ? (
+            <View style={styles.sentPill}>
+              <Text style={styles.sentPillText}>
+                {sentHi ? "Hi request sent" : "Chat request sent"}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.footerActions}>
+              <View style={styles.primaryActions}>
+                <Pressable style={styles.actionButton} onPress={() => sendHi(person.id)}>
+                  <Text style={styles.actionButtonText}>Come say hi</Text>
+                </Pressable>
+                <Pressable style={styles.actionButton} onPress={() => sendChat(person.id)}>
+                  <Text style={styles.actionButtonText}>Let's chat</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                style={styles.notInterestedButton}
+                onPress={() => {
+                  hideUser(person.id)
+                  navigation.goBack()
+                }}
+              >
+                <Text style={styles.notInterestedText}>Not interested</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -212,6 +253,25 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  sectionLabelMuted: {
+    color: '#A8A3B8',
+  },
+
+  // Topics
+  topicList: {
+    gap: 8,
+  },
+  topicItem: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#4A4458',
+  },
+  avoidTopicItem: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#A8A3B8',
+  },
+
   // Starters
   starterList: {
     gap: 10,
@@ -234,21 +294,43 @@ const styles = StyleSheet.create({
   footer: {
     paddingTop: 10,
   },
-  connectButton: {
-    backgroundColor: '#12101C',
-    paddingVertical: 16,
+  footerActions: {
+    gap: 10,
+  },
+  primaryActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: "#12101C",
+    paddingVertical: 14,
     borderRadius: 999,
-    alignItems: 'center',
+    alignItems: "center",
   },
-  connectButtonSent: {
-    backgroundColor: '#EEEBF2',
+  actionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
-  connectButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+  notInterestedButton: {
+    alignItems: "center",
+    paddingVertical: 6,
   },
-  connectButtonTextSent: {
-    color: '#A8A3B8',
+  notInterestedText: {
+    fontSize: 14,
+    color: "#A8A3B8",
+    fontWeight: "500",
+  },
+  sentPill: {
+    backgroundColor: "#F4F3F7",
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  sentPillText: {
+    fontSize: 14,
+    color: "#A8A3B8",
+    fontWeight: "500",
   },
 })

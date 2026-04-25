@@ -11,6 +11,7 @@ import ModePickerScreen from '../screens/ModePickerScreen'
 import BasicsScreen from '../screens/BasicsScreen'
 import DoneScreen from '../screens/DoneScreen'
 import ProfileDetailScreen from '../screens/ProfileDetailScreen'
+import EditProfileScreen from '../screens/EditProfileScreen'
 import MainTabNavigator from './MainTabNavigator'
 
 export type RootStackParamList = {
@@ -26,6 +27,7 @@ export type RootStackParamList = {
   Home: undefined
   MainTabs: undefined
   ProfileDetail: { personId: number }
+  EditProfile: undefined
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -51,6 +53,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
         <Stack.Screen name="ProfileDetail" component={ProfileDetailScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )
