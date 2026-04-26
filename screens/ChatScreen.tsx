@@ -24,6 +24,24 @@ function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
+function formatDateLabel(isoString: string): string {
+  const date = new Date(isoString)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === today.toDateString()) return "Today"
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+}
+
+function sameDay(a: string, b: string): boolean {
+  const da = new Date(a)
+  const db = new Date(b)
+  return da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+}
+
 export default function ChatScreen({ navigation, route }: Props) {
   const { personId, name } = route.params
   const scrollRef = useRef<ScrollView>(null)
@@ -202,27 +220,28 @@ export default function ChatScreen({ navigation, route }: Props) {
                 {canChat ? "No messages yet. Say hello!" : ""}
               </Text>
             ) : (
-              <>
-                <Text style={styles.dayLabel}>Messages</Text>
-                {messages.map(msg => {
-                  const fromMe = msg.senderId === myId
-                  return (
-                    <View
-                      key={msg.id}
-                      style={[styles.bubbleRow, fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}
-                    >
+              messages.map((msg, i) => {
+                const fromMe = msg.senderId === myId
+                const prev = messages[i - 1]
+                const showDateSep = !prev || !sameDay(prev.createdAt, msg.createdAt)
+                return (
+                  <View key={msg.id}>
+                    {showDateSep && (
+                      <Text style={styles.dayLabel}>{formatDateLabel(msg.createdAt)}</Text>
+                    )}
+                    <View style={[styles.bubbleRow, fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}>
                       <View style={[styles.bubble, fromMe ? styles.bubbleMe : styles.bubbleThem]}>
                         <Text style={[styles.bubbleText, fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
                           {msg.text}
                         </Text>
+                        <Text style={[styles.bubbleTime, fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
+                          {formatTime(msg.createdAt)}
+                        </Text>
                       </View>
-                      <Text style={[styles.bubbleTime, fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
-                        {formatTime(msg.createdAt)}
-                      </Text>
                     </View>
-                  )
-                })}
-              </>
+                  </View>
+                )
+              })
             )}
           </ScrollView>
         )}
@@ -369,14 +388,16 @@ const styles = StyleSheet.create({
     color: "#12101C",
   },
   bubbleTime: {
-    fontSize: 11,
-    color: "#A8A3B8",
-  },
-  bubbleTimeMe: {
+    fontSize: 10,
+    marginTop: 3,
+    opacity: 0.65,
     alignSelf: "flex-end",
   },
+  bubbleTimeMe: {
+    color: "#FFFFFF",
+  },
   bubbleTimeThem: {
-    alignSelf: "flex-start",
+    color: "#12101C",
   },
 
   // Input

@@ -34,7 +34,7 @@ export default function ConnectionsScreen() {
   const myId = myProfile.supabaseId
 
   const [connections, setConnections] = useState<Connection[]>([])
-  const [profileMap, setProfileMap] = useState<Map<number, Person>>(new Map())
+  const [profileMap, setProfileMap] = useState<Map<string, Person>>(new Map())
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -85,12 +85,20 @@ export default function ConnectionsScreen() {
   const receivedPending = connections.filter(
     c => c.receiverId === myId && c.status === "pending"
   )
-  const sentPending = connections.filter(
-    c => c.senderId === myId && c.status === "pending"
+  const sentHi = connections.filter(
+    c => c.senderId === myId && c.status === "pending" && c.type === "hi"
+  )
+  const sentChat = connections.filter(
+    c => c.senderId === myId && c.status === "pending" && c.type === "chat"
   )
   const accepted = connections.filter(c => c.status === "accepted")
 
-  const isEmpty = !loading && receivedPending.length === 0 && sentPending.length === 0 && accepted.length === 0
+  const isEmpty =
+    !loading &&
+    receivedPending.length === 0 &&
+    sentHi.length === 0 &&
+    sentChat.length === 0 &&
+    accepted.length === 0
 
   const renderPersonCard = (conn: Connection, index: number, slot: "received" | "sent" | "accepted") => {
     const otherId = getOtherId(conn)
@@ -190,21 +198,28 @@ export default function ConnectionsScreen() {
           <>
             {receivedPending.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>REQUESTS ({receivedPending.length})</Text>
+                <Text style={styles.sectionTitle}>RECEIVED REQUESTS ({receivedPending.length})</Text>
                 {receivedPending.map((conn, i) => renderPersonCard(conn, i, "received"))}
               </View>
             )}
 
-            {sentPending.length > 0 && (
+            {sentHi.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>SENT ({sentPending.length})</Text>
-                {sentPending.map((conn, i) => renderPersonCard(conn, i, "sent"))}
+                <Text style={styles.sectionTitle}>SENT HI REQUESTS ({sentHi.length})</Text>
+                {sentHi.map((conn, i) => renderPersonCard(conn, i, "sent"))}
+              </View>
+            )}
+
+            {sentChat.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>SENT CHAT REQUESTS ({sentChat.length})</Text>
+                {sentChat.map((conn, i) => renderPersonCard(conn, i, "sent"))}
               </View>
             )}
 
             {accepted.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>CONNECTIONS ({accepted.length})</Text>
+                <Text style={styles.sectionTitle}>MUTUAL CONNECTIONS ({accepted.length})</Text>
                 {accepted.map((conn, i) => renderPersonCard(conn, i, "accepted"))}
               </View>
             )}
