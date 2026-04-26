@@ -8,25 +8,19 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import { useUser } from "../context/UserContext"
 import { getConnectionWith, type Connection } from "../services/connectionService"
+import { getMessages, sendMessage, type Message } from "../services/messageService"
 
 type Props = NativeStackScreenProps<RootStackParamList, "Chat">
 
-type Message = {
-  id: number
-  text: string
-  fromMe: boolean
-  time: string
-}
-
-function formatTime() {
-  const now = new Date()
-  return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+function formatTime(isoString: string): string {
+  return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
 export default function ChatScreen({ navigation, route }: Props) {
@@ -36,31 +30,70 @@ export default function ChatScreen({ navigation, route }: Props) {
   const myId = myProfile.supabaseId
 
   const [connection, setConnection] = useState<Connection | null | "loading">("loading")
+  const [messages, setMessages] = useState<Message[]>([])
+  const [loading, setLoading] = useState(true)
+  const [inputText, setInputText] = useState("")
+  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     if (myId == null) {
       setConnection(null)
+      setLoading(false)
       return
     }
-    getConnectionWith(myId, personId)
-      .then(setConnection)
-      .catch(() => setConnection(null))
+
+    Promise.all([
+      getConnectionWith(myId, personId),
+      getMessages(myId, personId),
+    ])
+      .then(([conn, msgs]) => {
+        setConnection(conn)
+        setMessages(msgs)
+      })
+      .catch(err => {
+        console.error("[ChatScreen] load error:", err)
+        setConnection(null)
+      })
+      .finally(() => setLoading(false))
   }, [myId, personId])
 
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hey, good to connect!", fromMe: false, time: formatTime() },
-  ])
-  const [inputText, setInputText] = useState("")
+  const canChat =
+    connection !== "loading" &&
+    connection !== null &&
+    connection.status === "accepted"
 
-  const send = () => {
+  const isPending =
+    connection !== "loading" &&
+    connection !== null &&
+    connection.status === "pending"
+
+  const send = async () => {
     const trimmed = inputText.trim()
-    if (!trimmed) return
-    setMessages(prev => [
-      ...prev,
-      { id: Date.now(), text: trimmed, fromMe: true, time: formatTime() },
-    ])
+    if (!trimmed || !canChat || myId == null || sending) return
+
     setInputText("")
+    setSending(true)
+
+    const optimistic: Message = {
+      id: `optimistic-${Date.now()}`,
+      senderId: myId,
+      receiverId: personId,
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, optimistic])
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
+
+    try {
+      const saved = await sendMessage(myId, personId, trimmed)
+      setMessages(prev => prev.map(m => m.id === optimistic.id ? saved : m))
+    } catch (err) {
+      console.error("[ChatScreen] send error:", err)
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id))
+      setInputText(trimmed)
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -78,7 +111,7 @@ export default function ChatScreen({ navigation, route }: Props) {
           <View style={styles.backButton} />
         </View>
 
-        {connection !== "loading" && connection !== null && connection.status === "pending" && connection.senderId === myId && (
+        {isPending && connection.senderId === myId && (
           <View style={styles.pendingBanner}>
             <Text style={styles.pendingBannerText}>
               Your request is pending. You can chat once {name} accepts.
@@ -86,48 +119,82 @@ export default function ChatScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        <ScrollView
-          ref={scrollRef}
-          style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-        >
-          <Text style={styles.dayLabel}>Today</Text>
-          {messages.map(msg => (
-            <View
-              key={msg.id}
-              style={[styles.bubbleRow, msg.fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}
-            >
-              <View style={[styles.bubble, msg.fromMe ? styles.bubbleMe : styles.bubbleThem]}>
-                <Text style={[styles.bubbleText, msg.fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
-                  {msg.text}
-                </Text>
-              </View>
-              <Text style={[styles.bubbleTime, msg.fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
-                {msg.time}
+        {isPending && connection.senderId !== myId && (
+          <View style={styles.pendingBanner}>
+            <Text style={styles.pendingBannerText}>
+              {name} wants to chat. Accept their request in Connections to start messaging.
+            </Text>
+          </View>
+        )}
+
+        {!loading && connection === null && (
+          <View style={styles.pendingBanner}>
+            <Text style={styles.pendingBannerText}>
+              No connection with {name}. Send a connection request first.
+            </Text>
+          </View>
+        )}
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#12101C" />
+          </View>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+          >
+            {messages.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {canChat ? "No messages yet. Say hello!" : ""}
               </Text>
-            </View>
-          ))}
-        </ScrollView>
+            ) : (
+              <>
+                <Text style={styles.dayLabel}>Messages</Text>
+                {messages.map(msg => {
+                  const fromMe = msg.senderId === myId
+                  return (
+                    <View
+                      key={msg.id}
+                      style={[styles.bubbleRow, fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}
+                    >
+                      <View style={[styles.bubble, fromMe ? styles.bubbleMe : styles.bubbleThem]}>
+                        <Text style={[styles.bubbleText, fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
+                          {msg.text}
+                        </Text>
+                      </View>
+                      <Text style={[styles.bubbleTime, fromMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
+                        {formatTime(msg.createdAt)}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </>
+            )}
+          </ScrollView>
+        )}
 
         <SafeAreaView edges={["bottom"]} style={styles.inputSafeArea}>
           <View style={styles.inputRow}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, !canChat && styles.inputDisabled]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder="Message..."
+              placeholder={canChat ? "Message..." : "Accept connection to chat"}
               placeholderTextColor="#A8A3B8"
               returnKeyType="send"
               onSubmitEditing={send}
               blurOnSubmit={false}
               multiline
+              editable={canChat}
             />
             <Pressable
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              style={[styles.sendButton, (!inputText.trim() || !canChat || sending) && styles.sendButtonDisabled]}
               onPress={send}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || !canChat || sending}
             >
               <Text style={styles.sendButtonText}>↑</Text>
             </Pressable>
@@ -186,6 +253,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   // Messages
   messageList: {
     flex: 1,
@@ -202,6 +276,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 4,
     fontWeight: "500",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#A8A3B8",
+    textAlign: "center",
+    marginTop: 40,
   },
   bubbleRow: {
     gap: 4,
@@ -271,6 +351,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#12101C",
     maxHeight: 120,
+  },
+  inputDisabled: {
+    opacity: 0.5,
   },
   sendButton: {
     width: 40,
