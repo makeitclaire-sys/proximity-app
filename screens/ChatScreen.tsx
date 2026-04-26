@@ -16,6 +16,7 @@ import { RootStackParamList } from "../navigation/RootNavigator"
 import { useUser } from "../context/UserContext"
 import { getConnectionWith, type Connection } from "../services/connectionService"
 import { getMessages, sendMessage, type Message } from "../services/messageService"
+import { supabase } from "../lib/supabase"
 
 type Props = NativeStackScreenProps<RootStackParamList, "Chat">
 
@@ -57,6 +58,49 @@ export default function ChatScreen({ navigation, route }: Props) {
       .finally(() => setLoading(false))
   }, [myId, personId])
 
+  // Realtime subscription — fires for every INSERT on messages involving this conversation
+  useEffect(() => {
+    if (myId == null) return
+
+    const channel = supabase
+      .channel(`chat-${myId}-${personId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>
+          const senderId = row.sender_id as string
+          const receiverId = row.receiver_id as string
+
+          // Ignore messages outside this conversation
+          const inConversation =
+            (senderId === myId && receiverId === personId) ||
+            (senderId === personId && receiverId === myId)
+          if (!inConversation) return
+
+          const msg: Message = {
+            id: row.id as string,
+            senderId,
+            receiverId,
+            text: row.text as string,
+            createdAt: row.created_at as string,
+          }
+
+          setMessages(prev => {
+            // Deduplicate: real message may already be in state from sendMessage() response
+            if (prev.some(m => m.id === msg.id)) return prev
+            return [...prev, msg]
+          })
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [myId, personId])
+
   const canChat =
     connection !== "loading" &&
     connection !== null &&
@@ -86,7 +130,13 @@ export default function ChatScreen({ navigation, route }: Props) {
 
     try {
       const saved = await sendMessage(myId, personId, trimmed)
-      setMessages(prev => prev.map(m => m.id === optimistic.id ? saved : m))
+      // Realtime may have already added the real message before this resolves.
+      // Remove the optimistic entry; add the real one only if not already present.
+      setMessages(prev => {
+        const withoutOptimistic = prev.filter(m => m.id !== optimistic.id)
+        if (withoutOptimistic.some(m => m.id === saved.id)) return withoutOptimistic
+        return [...withoutOptimistic, saved]
+      })
     } catch (err) {
       console.error("[ChatScreen] send error:", err)
       setMessages(prev => prev.filter(m => m.id !== optimistic.id))
