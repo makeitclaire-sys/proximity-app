@@ -71,7 +71,7 @@ export async function getProfileById(id: string): Promise<Person | null> {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, age, bio, status, distance, mode, is_visible, interests, talk_topics, avoid_topics, conversation_starters")
+    .select("*")
     .eq("id", id)
     .single()
 
@@ -80,28 +80,39 @@ export async function getProfileById(id: string): Promise<Person | null> {
 }
 
 export async function updateProfile(id: string, updates: ProfileUpdates): Promise<void> {
+  console.log("[updateProfile] id:", id, "updates:", updates)
   const { error } = await supabase
     .from("profiles")
     .update(updates)
     .eq("id", id)
 
-  if (error) throw error
+  if (error) {
+    console.error("[updateProfile] ERROR:", error.message, error)
+    throw error
+  }
 
+  console.log("[updateProfile] success")
   supabaseProfilesCache.delete(id)
 }
 
 export async function uploadAvatar(id: string, localUri: string): Promise<string> {
+  // Path is relative to the bucket root — bucket name is NOT repeated here
+  const path = `${id}.jpg`
+  console.log("[uploadAvatar] bucket: avatars, path:", path, "uri:", localUri)
+
   const response = await fetch(localUri)
   const arrayBuffer = await response.arrayBuffer()
-
-  const path = `avatars/${id}.jpg`
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
     .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: true })
 
-  if (uploadError) throw uploadError
+  if (uploadError) {
+    console.error("[uploadAvatar] UPLOAD ERROR:", uploadError.message, uploadError)
+    throw uploadError
+  }
 
   const { data } = supabase.storage.from("avatars").getPublicUrl(path)
+  console.log("[uploadAvatar] public URL:", data.publicUrl)
   return data.publicUrl
 }

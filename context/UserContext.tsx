@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
+import { getProfileById } from "../services/profileService"
 
 export type UserProfile = {
   name: string
@@ -16,10 +17,14 @@ export type UserProfile = {
 
 type UserContextType = {
   profile: UserProfile
+  profileLoaded: boolean
   updateProfile: (updates: Partial<UserProfile>) => void
+  refreshProfile: () => Promise<void>
   toggleMode: () => void
   toggleVisibility: () => void
 }
+
+const CLAIRE_ID = "8c785cf7-3095-4ff8-9117-87c8c7f27102"
 
 const DEFAULT_PROFILE: UserProfile = {
   name: "Alex T.",
@@ -38,7 +43,7 @@ const DEFAULT_PROFILE: UserProfile = {
   ],
   mode: "social",
   isVisible: true,
-  supabaseId: null,
+  supabaseId: CLAIRE_ID,
   avatarUrl: null,
 }
 
@@ -46,6 +51,40 @@ const UserContext = createContext<UserContextType | null>(null)
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE)
+  const [profileLoaded, setProfileLoaded] = useState(false)
+
+  const refreshProfile = useCallback(async () => {
+    console.log("CURRENT USER ID:", CLAIRE_ID)
+    try {
+      const person = await getProfileById(CLAIRE_ID)
+      if (!person) {
+        console.log("PROFILE LOAD ERROR: getProfileById returned null — check UUID and RLS policy")
+        setProfileLoaded(true)
+        return
+      }
+      console.log("LOADED PROFILE:", person)
+      setProfile(prev => ({
+        ...prev,
+        name: person.name,
+        age: person.age,
+        bio: person.bio,
+        interests: person.interests,
+        talkTopics: person.talkTopics,
+        avoidTopics: person.avoidTopics,
+        mode: person.mode ?? prev.mode,
+        isVisible: person.isVisible ?? prev.isVisible,
+        avatarUrl: person.avatarUrl ?? null,
+      }))
+    } catch (err) {
+      console.log("PROFILE LOAD ERROR:", err)
+    } finally {
+      setProfileLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshProfile()
+  }, [refreshProfile])
 
   const updateProfile = (updates: Partial<UserProfile>) =>
     setProfile(prev => ({ ...prev, ...updates }))
@@ -60,7 +99,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setProfile(prev => ({ ...prev, isVisible: !prev.isVisible }))
 
   return (
-    <UserContext.Provider value={{ profile, updateProfile, toggleMode, toggleVisibility }}>
+    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, toggleMode, toggleVisibility }}>
       {children}
     </UserContext.Provider>
   )

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { SafeAreaView } from "react-native-safe-area-context"
@@ -21,16 +22,28 @@ import { updateProfile as saveToSupabase, uploadAvatar } from "../services/profi
 type Props = NativeStackScreenProps<RootStackParamList, "EditProfile">
 
 export default function EditProfileScreen({ navigation }: Props) {
-  const { profile, updateProfile } = useUser()
+  const { profile, profileLoaded, updateProfile, refreshProfile } = useUser()
 
-  const [name, setName] = useState(profile.name)
-  const [bio, setBio] = useState(profile.bio)
-  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "")
-  const [interestsText, setInterestsText] = useState(profile.interests.join("\n"))
-  const [talkText, setTalkText] = useState(profile.talkTopics.join("\n"))
-  const [avoidText, setAvoidText] = useState(profile.avoidTopics.join("\n"))
+  // Form fields — initialized empty; synced from profile once profileLoaded is true
+  const [name, setName] = useState("")
+  const [bio, setBio] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [interestsText, setInterestsText] = useState("")
+  const [talkText, setTalkText] = useState("")
+  const [avoidText, setAvoidText] = useState("")
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // Populate form once the real profile has been fetched from Supabase
+  useEffect(() => {
+    if (!profileLoaded) return
+    setName(profile.name)
+    setBio(profile.bio)
+    setAvatarUrl(profile.avatarUrl ?? "")
+    setInterestsText(profile.interests.join("\n"))
+    setTalkText(profile.talkTopics.join("\n"))
+    setAvoidText(profile.avoidTopics.join("\n"))
+  }, [profileLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const initials = name.trim()
     ? name.trim().split(" ").map(p => p[0]).join("")
@@ -55,7 +68,6 @@ export default function EditProfileScreen({ navigation }: Props) {
     const asset = result.assets[0]
 
     if (profile.supabaseId == null) {
-      // No Supabase ID yet — use local URI as preview only
       setAvatarUrl(asset.uri)
       updateProfile({ avatarUrl: asset.uri })
       return
@@ -67,7 +79,8 @@ export default function EditProfileScreen({ navigation }: Props) {
       setAvatarUrl(publicUrl)
       updateProfile({ avatarUrl: publicUrl })
       await saveToSupabase(profile.supabaseId, { avatar_url: publicUrl })
-    } catch {
+    } catch (err) {
+      console.error("UPLOAD ERROR:", err)
       Alert.alert("Upload failed", "Could not upload your photo. Please try again.")
     } finally {
       setUploading(false)
@@ -94,8 +107,11 @@ export default function EditProfileScreen({ navigation }: Props) {
           avoid_topics: avoidTopics,
           avatar_url: trimmedAvatarUrl,
         })
-      } catch {
-        Alert.alert("Error", "Could not save to Supabase. Changes have been saved locally.")
+        // Re-fetch so MyProfileScreen reflects the confirmed saved data
+        await refreshProfile()
+      } catch (err) {
+        console.error("SAVE ERROR:", err)
+        Alert.alert("Error", "Could not save to Supabase. Changes saved locally only.")
         setSaving(false)
         return
       }
@@ -103,6 +119,14 @@ export default function EditProfileScreen({ navigation }: Props) {
     }
 
     navigation.goBack()
+  }
+
+  if (!profileLoaded) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+      </SafeAreaView>
+    )
   }
 
   return (
@@ -146,10 +170,7 @@ export default function EditProfileScreen({ navigation }: Props) {
                     </Text>
                   </Pressable>
                   {avatarUrl ? (
-                    <Pressable
-                      style={styles.removeButton}
-                      onPress={() => setAvatarUrl("")}
-                    >
+                    <Pressable style={styles.removeButton} onPress={() => setAvatarUrl("")}>
                       <Text style={styles.removeButtonText}>Remove</Text>
                     </Pressable>
                   ) : null}
@@ -242,6 +263,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FAFAFB",
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
   },
   content: {
     flex: 1,
