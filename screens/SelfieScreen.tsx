@@ -18,42 +18,85 @@ type Stage = 'intro' | 'scanning' | 'verified'
 const OVAL_W = 220
 const OVAL_H = 280
 
+const PHASES = [
+  { hint: 'Center your face in the oval',  color: 'rgba(255,255,255,0.85)' },
+  { hint: 'Face found — hold still',       color: '#06D6A0' },
+  { hint: 'Verifying your identity…',      color: '#06D6A0' },
+] as const
+
 export default function SelfieScreen({ navigation }: Props) {
-  const [stage, setStage] = useState<Stage>('intro')
+  const [stage, setStage]   = useState<Stage>('intro')
+  const [phase, setPhase]   = useState(0)
   const [permission, requestPermission] = useCameraPermissions()
-  const pulseScale = useRef(new Animated.Value(1)).current
-  const pulseOpacity = useRef(new Animated.Value(0.75)).current
+
+  const scanLineY     = useRef(new Animated.Value(0)).current
+  const pulseScale    = useRef(new Animated.Value(1)).current
+  const pulseOpacity  = useRef(new Animated.Value(0.6)).current
 
   useEffect(() => {
     if (stage !== 'scanning') return
 
-    pulseScale.setValue(1)
-    pulseOpacity.setValue(0.75)
-
-    const pulse = Animated.loop(
-      Animated.parallel([
-        Animated.timing(pulseScale, {
-          toValue: 1.28,
-          duration: 1300,
+    // Scan line sweeps top → bottom → top, continuously
+    const sweepAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanLineY, {
+          toValue: OVAL_H,
+          duration: 1400,
           useNativeDriver: true,
         }),
-        Animated.timing(pulseOpacity, {
+        Animated.timing(scanLineY, {
           toValue: 0,
-          duration: 1300,
+          duration: 1400,
           useNativeDriver: true,
         }),
       ])
     )
-    pulse.start()
 
-    const timer = setTimeout(() => {
-      pulse.stop()
+    // Pulse ring expands and fades
+    const pulseAnim = Animated.loop(
+      Animated.parallel([
+        Animated.timing(pulseScale,   { toValue: 1.22, duration: 950, useNativeDriver: true }),
+        Animated.timing(pulseOpacity, { toValue: 0,    duration: 950, useNativeDriver: true }),
+      ])
+    )
+
+    const resetPulse = () => {
+      pulseScale.setValue(1)
+      pulseOpacity.setValue(0.6)
+    }
+
+    sweepAnim.start()
+    pulseAnim.start()
+
+    // Phase 1: face found
+    const t1 = setTimeout(() => {
+      resetPulse()
+      setPhase(1)
+    }, 1600)
+
+    // Phase 2: verifying
+    const t2 = setTimeout(() => {
+      resetPulse()
+      setPhase(2)
+    }, 2900)
+
+    // Done
+    const t3 = setTimeout(() => {
+      sweepAnim.stop()
+      pulseAnim.stop()
       setStage('verified')
-    }, 3200)
+    }, 4100)
 
     return () => {
-      pulse.stop()
-      clearTimeout(timer)
+      sweepAnim.stop()
+      pulseAnim.stop()
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      scanLineY.setValue(0)
+      pulseScale.setValue(1)
+      pulseOpacity.setValue(0.6)
+      setPhase(0)
     }
   }, [stage])
 
@@ -61,16 +104,14 @@ export default function SelfieScreen({ navigation }: Props) {
     if (!permission?.granted) {
       const result = await requestPermission()
       if (!result.granted) {
-        Alert.alert(
-          'Camera access needed',
-          'Please allow camera access in Settings to verify your selfie.',
-        )
+        Alert.alert('Camera access needed', 'Please allow camera access in Settings.')
         return
       }
     }
     setStage('scanning')
   }
 
+  // ─── Intro ───────────────────────────────────────────────────────────────
   if (stage === 'intro') {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -100,32 +141,65 @@ export default function SelfieScreen({ navigation }: Props) {
     )
   }
 
+  // ─── Scanning ─────────────────────────────────────────────────────────────
   if (stage === 'scanning') {
+    const { hint, color } = PHASES[phase]
+
     return (
       <View style={styles.scanRoot}>
         <CameraView style={StyleSheet.absoluteFill} facing="front" />
 
         <View style={styles.scanDimmer}>
           <SafeAreaView style={styles.scanSafeArea} edges={['top', 'bottom']}>
-            <Text style={styles.scanTitle}>Hold still…</Text>
 
+            <Text style={styles.scanTitle}>
+              {phase === 0 ? 'Hold still…' : phase === 1 ? 'Face found!' : 'Verifying…'}
+            </Text>
+
+            {/* Oval + scan line + decorations */}
             <View style={styles.ovalContainer}>
+
+              {/* Pulse ring */}
               <Animated.View
                 style={[
                   styles.pulseRing,
-                  { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+                  {
+                    borderColor: color,
+                    transform: [{ scale: pulseScale }],
+                    opacity: pulseOpacity,
+                  },
                 ]}
               />
-              <View style={styles.oval} />
+
+              {/* Scan line clipped to oval shape */}
+              <View style={styles.ovalClip}>
+                <Animated.View
+                  style={[
+                    styles.scanLine,
+                    { backgroundColor: color, transform: [{ translateY: scanLineY }] },
+                  ]}
+                />
+              </View>
+
+              {/* Oval border */}
+              <View style={[styles.oval, { borderColor: color }]} />
+
+              {/* Corner brackets */}
+              <View style={[styles.corner, styles.cornerTL, { borderColor: color }]} />
+              <View style={[styles.corner, styles.cornerTR, { borderColor: color }]} />
+              <View style={[styles.corner, styles.cornerBL, { borderColor: color }]} />
+              <View style={[styles.corner, styles.cornerBR, { borderColor: color }]} />
             </View>
 
-            <Text style={styles.scanHint}>Scanning your face</Text>
+            <Text style={styles.scanHint}>{hint}</Text>
+
           </SafeAreaView>
         </View>
       </View>
     )
   }
 
+  // ─── Verified ─────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
@@ -209,8 +283,6 @@ const styles = StyleSheet.create({
     color: '#A8A3B8',
     textAlign: 'center',
   },
-
-  // Intro illustration
   introCircle: {
     width: 120,
     height: 120,
@@ -226,14 +298,14 @@ const styles = StyleSheet.create({
     fontSize: 52,
   },
 
-  // Scanning
+  // ── Scanning ──────────────────────────────────────
   scanRoot: {
     flex: 1,
     backgroundColor: '#000',
   },
   scanDimmer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.48)',
+    backgroundColor: 'rgba(0,0,0,0.52)',
   },
   scanSafeArea: {
     flex: 1,
@@ -245,6 +317,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   ovalContainer: {
     width: OVAL_W,
@@ -252,32 +325,82 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Clips the scan line to the oval pill shape
+  ovalClip: {
+    position: 'absolute',
+    width: OVAL_W,
+    height: OVAL_H,
+    borderRadius: OVAL_W / 2,
+    overflow: 'hidden',
+  },
+  scanLine: {
+    position: 'absolute',
+    top: 0,
+    width: OVAL_W,
+    height: 2,
+    opacity: 0.55,
+  },
+  oval: {
+    position: 'absolute',
+    width: OVAL_W,
+    height: OVAL_H,
+    borderRadius: OVAL_W / 2,
+    borderWidth: 3,
+  },
   pulseRing: {
     position: 'absolute',
     width: OVAL_W,
     height: OVAL_H,
     borderRadius: OVAL_W / 2,
     borderWidth: 3,
-    borderColor: '#06D6A0',
   },
-  oval: {
-    width: OVAL_W,
-    height: OVAL_H,
-    borderRadius: OVAL_W / 2,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
+  // Corner tracking brackets
+  corner: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+  },
+  cornerTL: {
+    top: 12,
+    left: 12,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 4,
+  },
+  cornerTR: {
+    top: 12,
+    right: 12,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 4,
+  },
+  cornerBL: {
+    bottom: 12,
+    left: 12,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 4,
+  },
+  cornerBR: {
+    bottom: 12,
+    right: 12,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 4,
   },
   scanHint: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.65)',
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 0.1,
   },
 
-  // Verified
+  // ── Verified ──────────────────────────────────────
   verifiedCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: 'rgba(6, 214, 160, 0.1)',
+    backgroundColor: 'rgba(6,214,160,0.1)',
     borderWidth: 2,
     borderColor: '#06D6A0',
     justifyContent: 'center',

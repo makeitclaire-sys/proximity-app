@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ModePicker'>
 type Mode = 'social' | 'professional'
@@ -25,6 +26,7 @@ const MODES: { id: Mode; emoji: string; title: string; desc: string; tint: strin
 ]
 
 export default function ModePickerScreen({ navigation }: Props) {
+  const { setMode } = useSignup()
   const [selected, setSelected] = useState<Mode | null>(null)
 
   return (
@@ -64,6 +66,7 @@ export default function ModePickerScreen({ navigation }: Props) {
             style={[styles.primaryButton, !selected && styles.primaryButtonDisabled]}
             onPress={() => {
               if (selected) {
+                setMode(selected)
                 navigation.navigate('Basics', { mode: selected })
               }
             }}

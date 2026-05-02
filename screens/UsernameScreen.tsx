@@ -12,10 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Username'>
 
 export default function UsernameScreen({ navigation }: Props) {
+  const { setUsername: saveUsername } = useSignup()
   const [username, setUsername] = useState('')
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
 
@@ -108,6 +110,7 @@ export default function UsernameScreen({ navigation }: Props) {
                 onPress={() => {
                   if (isAvailable) {
                     Keyboard.dismiss()
+                    saveUsername(username)
                     navigation.navigate('Birthday')
                   }
                 }}

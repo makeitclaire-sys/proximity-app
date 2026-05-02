@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react"
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useState, useCallback } from "react"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image } from "react-native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
-import { mockPeople } from "../data/mockPeople"
-import { useInteractions } from "../context/InteractionContext"
-import { getProfiles, supabaseProfilesCache } from "../services/profileService"
+import { useUser } from "../context/UserContext"
+import { getProfiles } from "../services/profileService"
+import { getConnections } from "../services/connectionService"
+import { getConversationPreviews } from "../services/messageService"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
@@ -13,20 +14,11 @@ type Conversation = {
   id: string
   personId: string
   name: string
+  avatarUrl: string | null
   lastMessage: string
+  lastMessageAt: string | null
   time: string
-  unread: number
 }
-
-const MOCK_LAST_MESSAGES = [
-  "That was really interesting, thanks for sharing!",
-  "Let me know if you're around this weekend",
-  "Totally agree, the talk was brilliant",
-  "Haha yes, great chatting with you!",
-  "Would love to grab coffee sometime",
-]
-
-const MOCK_TIMES = ["2m", "1h", "3h", "Yesterday", "2d"]
 
 const AVATAR_COLORS = [
   { bg: "rgba(255, 45, 135, 0.12)", fg: "#FF2D87" },
@@ -46,51 +38,75 @@ function hashId(id: string): number {
 const getAvatar = (id: string) => AVATAR_COLORS[hashId(id) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]
 const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("")
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "now"
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return "Yesterday"
+  if (days < 7) return new Date(isoString).toLocaleDateString([], { weekday: "short" })
+  return new Date(isoString).toLocaleDateString([], { month: "short", day: "numeric" })
+}
+
 export default function MessagesScreen() {
   const navigation = useNavigation<NavProp>()
-  const { chatRequests } = useInteractions()
+  const { profile: myProfile } = useUser()
+  const myId = myProfile.supabaseId
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    getProfiles()
-      .then(data => {
-        if (!cancelled) {
-          const convos: Conversation[] = data.map((person, i) => ({
-            id: person.id,
-            personId: person.id,
-            name: person.name,
-            lastMessage: MOCK_LAST_MESSAGES[i % MOCK_LAST_MESSAGES.length],
-            time: MOCK_TIMES[i % MOCK_TIMES.length],
-            unread: i < 2 ? (i === 0 ? 2 : 1) : 0,
-          }))
-          setConversations(convos)
+  const load = useCallback(async () => {
+    if (myId == null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const [allProfiles, allConnections, previews] = await Promise.all([
+        getProfiles(),
+        getConnections(myId),
+        getConversationPreviews(myId),
+      ])
+
+      const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+      const accepted = allConnections.filter(c => c.status === "accepted")
+
+      const convos: Conversation[] = accepted.map(conn => {
+        const otherId = conn.senderId === myId ? conn.receiverId : conn.senderId
+        const person = profileMap.get(otherId)
+        const preview = previews.get(otherId)
+        return {
+          id: conn.id,
+          personId: otherId,
+          name: person?.name ?? `User ${otherId.slice(0, 8)}`,
+          avatarUrl: person?.avatarUrl ?? null,
+          lastMessage: preview?.text ?? "",
+          lastMessageAt: preview?.createdAt ?? null,
+          time: preview ? formatRelativeTime(preview.createdAt) : "",
         }
       })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
 
-  const chatConvos: Conversation[] = chatRequests
-    .filter(id => !conversations.some(c => c.personId === id))
-    .flatMap(id => {
-      const p = mockPeople.find(m => m.id === id) ?? supabaseProfilesCache.get(id)
-      return p
-        ? [{ id: id + "-chat", personId: id, name: p.name, lastMessage: "You sent a chat request", time: "Now", unread: 0 }]
-        : []
-    })
+      // Sort: conversations with messages first (newest first), then messagelessly
+      convos.sort((a, b) => {
+        if (!a.lastMessageAt && !b.lastMessageAt) return 0
+        if (!a.lastMessageAt) return 1
+        if (!b.lastMessageAt) return -1
+        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      })
 
-  const allConversations = [...chatConvos, ...conversations]
+      setConversations(convos)
+    } catch (err) {
+      console.error("[MessagesScreen] load error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [myId])
 
-  const openConversation = (conv: Conversation) => {
-    setConversations(prev =>
-      prev.map(c => c.id === conv.id ? { ...c, unread: 0 } : c)
-    )
-    navigation.navigate("Chat", { personId: conv.personId, name: conv.name })
-  }
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   return (
     <SafeAreaView style={styles.container}>
@@ -103,53 +119,47 @@ export default function MessagesScreen() {
 
         {loading ? (
           <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
-        ) : allConversations.length === 0 ? (
+        ) : conversations.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💬</Text>
             <Text style={styles.emptyTitle}>No conversations yet</Text>
             <Text style={styles.emptySubtitle}>
-              When you connect with someone, your messages will appear here.
+              When someone accepts your chat request, they appear here.
             </Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {allConversations.map((conv, index) => {
+            {conversations.map((conv, index) => {
               const av = getAvatar(conv.personId)
-              const isUnread = conv.unread > 0
               return (
                 <Pressable
                   key={conv.id ?? index}
                   style={styles.card}
-                  onPress={() => openConversation(conv)}
+                  onPress={() => navigation.navigate("Chat", { personId: conv.personId, name: conv.name })}
                 >
                   <View style={[styles.avatar, { backgroundColor: av.bg }]}>
-                    <Text style={[styles.avatarText, { color: av.fg }]}>
-                      {getInitials(conv.name)}
-                    </Text>
+                    {conv.avatarUrl ? (
+                      <Image source={{ uri: conv.avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={[styles.avatarText, { color: av.fg }]}>
+                        {getInitials(conv.name)}
+                      </Text>
+                    )}
                   </View>
 
                   <View style={styles.middle}>
                     <View style={styles.topRow}>
-                      <Text style={[styles.name, isUnread && styles.nameUnread]}>
-                        {conv.name}
-                      </Text>
-                      <Text style={styles.time}>{conv.time}</Text>
+                      <Text style={styles.name}>{conv.name}</Text>
+                      {conv.time ? <Text style={styles.time}>{conv.time}</Text> : null}
                     </View>
 
-                    <View style={styles.bottomRow}>
-                      <Text
-                        style={[styles.preview, isUnread && styles.previewUnread]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {conv.lastMessage}
-                      </Text>
-                      {isUnread && (
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>{conv.unread}</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text
+                      style={[styles.preview, !conv.lastMessage && styles.previewEmpty]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {conv.lastMessage || "No messages yet"}
+                    </Text>
                   </View>
                 </Pressable>
               )
@@ -204,9 +214,14 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
     flexShrink: 0,
+  },
+  avatarImage: {
+    width: 46,
+    height: 46,
   },
   avatarText: {
     fontSize: 16,
@@ -223,50 +238,22 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 15,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#12101C",
-  },
-  nameUnread: {
-    fontWeight: "700",
   },
   time: {
     fontSize: 12,
     color: "#A8A3B8",
-    fontWeight: "400",
-  },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
   },
   preview: {
-    flex: 1,
     fontSize: 13,
     color: "#A8A3B8",
   },
-  previewUnread: {
-    color: "#4A4458",
-  },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#12101C",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-    flexShrink: 0,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFFFFF",
+  previewEmpty: {
+    fontStyle: "italic",
   },
   emptyState: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
     paddingTop: 80,
     gap: 12,
   },

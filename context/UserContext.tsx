@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
-import { getProfileById } from "../services/profileService"
+import { getProfileById, updateProfile as saveProfileField } from "../services/profileService"
+import { supabase } from "../lib/supabase"
 
 export type UserProfile = {
   name: string
@@ -52,11 +53,25 @@ const UserContext = createContext<UserContextType | null>(null)
 export function UserProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE)
   const [profileLoaded, setProfileLoaded] = useState(false)
+  const [authUserId, setAuthUserId] = useState<string | null>(null)
+
+  // Authenticated user takes priority; fall back to CLAIRE_ID for demo/dev mode
+  const currentUserId = authUserId ?? CLAIRE_ID
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUserId(session?.user.id ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUserId(session?.user.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   const refreshProfile = useCallback(async () => {
-    console.log("CURRENT USER ID:", CLAIRE_ID)
+    console.log("CURRENT USER ID:", currentUserId)
     try {
-      const person = await getProfileById(CLAIRE_ID)
+      const person = await getProfileById(currentUserId)
       if (!person) {
         console.log("PROFILE LOAD ERROR: getProfileById returned null — check UUID and RLS policy")
         setProfileLoaded(true)
@@ -65,6 +80,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       console.log("LOADED PROFILE:", person)
       setProfile(prev => ({
         ...prev,
+        supabaseId: currentUserId,
         name: person.name,
         age: person.age,
         bio: person.bio,
@@ -80,7 +96,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setProfileLoaded(true)
     }
-  }, [])
+  }, [currentUserId])
 
   useEffect(() => {
     refreshProfile()
@@ -89,14 +105,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const updateProfile = (updates: Partial<UserProfile>) =>
     setProfile(prev => ({ ...prev, ...updates }))
 
-  const toggleMode = () =>
-    setProfile(prev => ({
-      ...prev,
-      mode: prev.mode === "social" ? "professional" : "social",
-    }))
+  const toggleMode = () => {
+    const newMode = profile.mode === "social" ? "professional" : "social"
+    setProfile(prev => ({ ...prev, mode: newMode }))
+    if (profile.supabaseId != null) {
+      saveProfileField(profile.supabaseId, { mode: newMode }).catch(err =>
+        console.error("[toggleMode] save error:", err)
+      )
+    }
+  }
 
-  const toggleVisibility = () =>
-    setProfile(prev => ({ ...prev, isVisible: !prev.isVisible }))
+  const toggleVisibility = () => {
+    const newVisible = !profile.isVisible
+    setProfile(prev => ({ ...prev, isVisible: newVisible }))
+    if (profile.supabaseId != null) {
+      saveProfileField(profile.supabaseId, { is_visible: newVisible }).catch(err =>
+        console.error("[toggleVisibility] save error:", err)
+      )
+    }
+  }
 
   return (
     <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, toggleMode, toggleVisibility }}>

@@ -54,6 +54,34 @@ function rowToPerson(row: ProfileRow): Person {
   return person
 }
 
+export async function createProfile(
+  userId: string,
+  data: {
+    name: string
+    age: number
+    bio: string
+    status: string
+    mode: "social" | "professional"
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({
+      id: userId,
+      name: data.name,
+      age: data.age,
+      bio: data.bio,
+      status: data.status,
+      mode: data.mode,
+      is_visible: true,
+      interests: [],
+      talk_topics: [],
+      avoid_topics: [],
+      conversation_starters: [],
+    })
+  if (error) throw error
+}
+
 export async function getProfiles(): Promise<Person[]> {
   const { data, error } = await supabase
     .from("profiles")

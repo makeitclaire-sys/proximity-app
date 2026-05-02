@@ -29,7 +29,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const person = route.params.profile
     ?? mockPeople.find(p => p.id === route.params.personId)
     ?? supabaseProfilesCache.get(route.params.personId)
-  const { hiRequests, chatRequests, sendHi, sendChat, hideUser } = useInteractions()
+  const { hideUser } = useInteractions()
   const { profile: myProfile } = useUser()
   const myId = myProfile.supabaseId
   const insets = useSafeAreaInsets()
@@ -55,25 +55,25 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const avatarColor = AVATAR_COLORS[hashId(person.id) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]
   const initials = person.name.split(' ').map(p => p[0]).join('')
 
-  const sentHi = hiRequests.includes(person.id) || connection?.type === "hi"
-  const sentChat = chatRequests.includes(person.id) || connection?.type === "chat"
+  const sentHi = connection?.type === "hi"
+  const sentChat = connection?.type === "chat"
   const actionTaken = sentHi || sentChat
 
   const handleSendHi = () => {
-    sendHi(person.id)
-    if (myId != null) {
-      createConnection(myId, person.id, "hi")
-        .then(() => setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", createdAt: "" }))
-        .catch(() => {})
-    }
+    if (myId == null) return
+    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", createdAt: "" })
+    createConnection(myId, person.id, "hi").catch(() => {
+      setConnection(null)
+    })
   }
 
   const handleSendChat = () => {
-    sendChat(person.id)
+    if (myId == null) return
+    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "chat", status: "pending", createdAt: "" })
+    createConnection(myId, person.id, "chat").catch(() => {
+      setConnection(null)
+    })
     navigation.navigate("Chat", { personId: person.id, name: person.name })
-    if (myId != null) {
-      createConnection(myId, person.id, "chat").catch(() => {})
-    }
   }
 
   return (

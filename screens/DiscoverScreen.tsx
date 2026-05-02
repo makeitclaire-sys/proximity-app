@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { SafeAreaView, View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import type { Person } from "../data/mockPeople"
@@ -18,22 +18,17 @@ export default function DiscoverScreen() {
   const [profiles, setProfiles] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let cancelled = false
+    setLoading(true)
 
     getProfiles()
-      .then(data => {
-        if (!cancelled) setProfiles(data)
-      })
-      .catch(() => {
-        if (!cancelled) setProfiles([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+      .then(data => { if (!cancelled) setProfiles(data) })
+      .catch(() => { if (!cancelled) setProfiles([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [])
+  }, []))
 
   const visiblePeople = profiles.filter(p => !hiddenUsers.includes(p.id))
 

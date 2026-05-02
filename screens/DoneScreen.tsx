@@ -1,8 +1,13 @@
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, Text, Pressable, StyleSheet, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Defs, LinearGradient as SvgGradient, Stop, Circle } from 'react-native-svg'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
+import { useUser } from '../context/UserContext'
+import { createProfile } from '../services/profileService'
+import { supabase } from '../lib/supabase'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Done'>
 type Mode = 'social' | 'professional'
@@ -13,10 +18,72 @@ const MODE_CONFIG: Record<Mode, { emoji: string; accent: string }> = {
 }
 
 export default function DoneScreen({ route, navigation }: Props) {
-  const mode  = route.params.mode
-  const other = (mode === 'social' ? 'professional' : 'social') as Mode
+  const mode       = route.params.mode
+  const other      = (mode === 'social' ? 'professional' : 'social') as Mode
   const otherAccent = MODE_CONFIG[other].accent
   const otherEmoji  = MODE_CONFIG[other].emoji
+
+  const { username, age, status, bio, reset } = useSignup()
+  const { refreshProfile } = useUser()
+  const [creating, setCreating] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      const { data: authData, error: authError } = await supabase.auth.signInAnonymously()
+      if (authError || !authData.user) {
+        throw new Error(authError?.message ?? 'Could not create account.')
+      }
+      await createProfile(authData.user.id, {
+        name: username,
+        age: age ?? 0,
+        bio,
+        status,
+        mode,
+      })
+      await refreshProfile()
+      if (!cancelled) {
+        reset()
+        setCreating(false)
+      }
+    }
+
+    run().catch((err: unknown) => {
+      if (!cancelled) {
+        setError(err instanceof Error ? err.message : 'Could not create profile.')
+        setCreating(false)
+      }
+    })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (creating) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#12101C" />
+          <Text style={styles.loadingText}>Setting up your profile…</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable onPress={() => navigation.navigate('MainTabs')}>
+            <Text style={styles.secondaryLink}>Continue anyway</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -55,17 +122,17 @@ export default function DoneScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.footer}>
-  <Pressable
-    style={[styles.primaryButton, { backgroundColor: otherAccent }]}
-    onPress={() => Alert.alert('Coming soon', 'Add profile flow coming soon')}
-  >
-    <Text style={styles.primaryButtonText}>Set up my {other} profile</Text>
-  </Pressable>
+          <Pressable
+            style={[styles.primaryButton, { backgroundColor: otherAccent }]}
+            onPress={() => Alert.alert('Coming soon', 'Add profile flow coming soon')}
+          >
+            <Text style={styles.primaryButtonText}>Set up my {other} profile</Text>
+          </Pressable>
 
-  <Pressable onPress={() => navigation.navigate('MainTabs')}>
-    <Text style={styles.secondaryLink}>Maybe later — take me to Proximity</Text>
-  </Pressable>
-</View>
+          <Pressable onPress={() => navigation.navigate('MainTabs')}>
+            <Text style={styles.secondaryLink}>Maybe later — take me to Proximity</Text>
+          </Pressable>
+        </View>
 
       </View>
     </SafeAreaView>
@@ -77,14 +144,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAFAFB',
   },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    fontSize: 15,
+    color: '#4A4458',
+  },
+  errorText: {
+    fontSize: 15,
+    color: '#FF2D87',
+    textAlign: 'center',
+  },
   content: {
     flex: 1,
     paddingHorizontal: 24,
     paddingBottom: 16,
     justifyContent: 'space-between',
   },
-
-  // Header
   header: {
     paddingTop: 24,
     gap: 12,
@@ -101,8 +182,6 @@ const styles = StyleSheet.create({
     color: '#4A4458',
     maxWidth: 320,
   },
-
-  // Middle
   middle: {
     alignItems: 'center',
     gap: 28,
@@ -144,8 +223,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: '#4A4458',
   },
-
-  // Footer
   footer: {
     gap: 16,
     alignItems: 'center',

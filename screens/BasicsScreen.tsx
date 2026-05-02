@@ -13,10 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Basics'>
 
 export default function BasicsScreen({ navigation, route }: Props) {
+  const { setStatus: saveStatus, setBio: saveBio } = useSignup()
   // Try to read mode from route params; default to 'social'
   const mode = route.params?.mode || 'social'
   const accent = mode === 'professional' ? '#4F46E5' : '#FF2D87'
@@ -129,6 +131,8 @@ export default function BasicsScreen({ navigation, route }: Props) {
                 onPress={() => {
                   if (canContinue) {
                     Keyboard.dismiss()
+                    saveStatus(status)
+                    saveBio(bio)
                     navigation.navigate('Done', { mode })
                   }
                 }}

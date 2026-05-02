@@ -12,11 +12,31 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
+import CountryPickerModal from '../components/CountryPickerModal'
+import { countryFlag, type Country } from '../data/countries'
+
+const DEFAULT_COUNTRY: Country = { name: 'United States', code: 'US', dialCode: '1' }
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Phone'>
 
 export default function PhoneScreen({ navigation }: Props) {
-  const [phone, setPhone] = useState('')
+  const { setPhone } = useSignup()
+  const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY)
+  const [phone, setLocalPhone] = useState('')
+  const [pickerVisible, setPickerVisible] = useState(false)
+
+  const digits = phone.replace(/\D/g, '')
+  const isValid = digits.length >= 5 && country.dialCode.length + digits.length <= 15
+
+  const handleContinue = () => {
+    if (!isValid) return
+    Keyboard.dismiss()
+    const localNumber = digits.replace(/^0/, '')
+    const formatted = `+${country.dialCode}${localNumber}`
+    setPhone(formatted)
+    navigation.navigate('Username')
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -30,35 +50,39 @@ export default function PhoneScreen({ navigation }: Props) {
             <View style={styles.body}>
               <Text style={styles.title}>What's your number?</Text>
               <Text style={styles.subtitle}>
-                We'll text you a code. Your number is never shown to other users.
+                Your number is never shown to other users.
               </Text>
 
               <View style={styles.inputRow}>
-                <View style={styles.countryCodeBox}>
-                  <Text style={styles.countryCode}>+1</Text>
-                </View>
+                <Pressable
+                  style={styles.countryCodeBox}
+                  onPress={() => setPickerVisible(true)}
+                >
+                  <Text style={styles.flagText}>{countryFlag(country.code)}</Text>
+                  <Text style={styles.countryCode}>+{country.dialCode}</Text>
+                  <Text style={styles.chevron}>▾</Text>
+                </Pressable>
+
                 <TextInput
-                  placeholder="555 012 3847"
+                  placeholder="Phone number"
                   placeholderTextColor="#A8A3B8"
                   keyboardType="phone-pad"
                   style={styles.input}
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={setLocalPhone}
                   returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
+                  onSubmitEditing={handleContinue}
                 />
               </View>
             </View>
 
             <View style={styles.footer}>
               <Pressable
-                style={styles.primaryButton}
-                onPress={() => {
-                  Keyboard.dismiss()
-                  navigation.navigate('Code')
-                }}
+                style={[styles.primaryButton, !isValid && styles.primaryButtonDisabled]}
+                onPress={handleContinue}
+                disabled={!isValid}
               >
-                <Text style={styles.primaryButtonText}>Send code</Text>
+                <Text style={styles.primaryButtonText}>Continue</Text>
               </Pressable>
 
               <Text style={styles.helperText}>
@@ -68,6 +92,12 @@ export default function PhoneScreen({ navigation }: Props) {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      <CountryPickerModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onSelect={c => { setCountry(c); setLocalPhone('') }}
+      />
     </SafeAreaView>
   )
 }
@@ -120,19 +150,30 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   countryCodeBox: {
-    paddingHorizontal: 16,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
     borderRightWidth: 1,
     borderRightColor: '#EEEBF2',
   },
+  flagText: {
+    fontSize: 18,
+  },
   countryCode: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#12101C',
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  chevron: {
+    fontSize: 11,
+    color: '#A8A3B8',
+    marginTop: 1,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 18,
     fontSize: 17,
     color: '#12101C',
@@ -145,6 +186,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
   },
   primaryButtonText: {
     color: '#FFFFFF',

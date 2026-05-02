@@ -12,10 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
+import { useSignup } from '../context/SignupContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Birthday'>
 
 export default function BirthdayScreen({ navigation }: Props) {
+  const { setAge } = useSignup()
   const [month, setMonth] = useState('')
   const [day, setDay] = useState('')
   const [year, setYear] = useState('')
@@ -154,6 +156,7 @@ export default function BirthdayScreen({ navigation }: Props) {
                 onPress={() => {
                   if (canContinue) {
                     Keyboard.dismiss()
+                    setAge(age!)
                     navigation.navigate('Selfie')
                   }
                 }}

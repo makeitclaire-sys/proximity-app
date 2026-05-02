@@ -31,6 +31,33 @@ export async function getMessages(userId1: string, userId2: string): Promise<Mes
   return (data ?? []).map(rowToMessage)
 }
 
+export type ConversationPreview = {
+  text: string
+  createdAt: string
+}
+
+// Returns the most recent message for each conversation partner in one query.
+export async function getConversationPreviews(
+  userId: string
+): Promise<Map<string, ConversationPreview>> {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("sender_id, receiver_id, text, created_at")
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+
+  const map = new Map<string, ConversationPreview>()
+  for (const row of (data ?? []) as Array<Record<string, string>>) {
+    const partnerId = row.sender_id === userId ? row.receiver_id : row.sender_id
+    if (!map.has(partnerId)) {
+      map.set(partnerId, { text: row.text, createdAt: row.created_at })
+    }
+  }
+  return map
+}
+
 export async function sendMessage(
   senderId: string,
   receiverId: string,
