@@ -6,6 +6,7 @@ export type Connection = {
   receiverId: string
   type: "hi" | "chat"
   status: "pending" | "accepted" | "declined"
+  mode: "social" | "professional"
   createdAt: string
 }
 
@@ -16,6 +17,7 @@ function rowToConnection(row: Record<string, unknown>): Connection {
     receiverId: row.receiver_id as string,
     type: row.type as "hi" | "chat",
     status: row.status as "pending" | "accepted" | "declined",
+    mode: (row.mode as "social" | "professional") ?? "social",
     createdAt: row.created_at as string,
   }
 }
@@ -24,12 +26,13 @@ function rowToConnection(row: Record<string, unknown>): Connection {
 export async function createConnection(
   senderId: string,
   receiverId: string,
-  type: "hi" | "chat"
+  type: "hi" | "chat",
+  mode: "social" | "professional" = "social"
 ): Promise<void> {
   const { error } = await supabase
     .from("connections")
     .upsert(
-      { sender_id: senderId, receiver_id: receiverId, type, status: "pending" },
+      { sender_id: senderId, receiver_id: receiverId, type, status: "pending", mode },
       { onConflict: "sender_id,receiver_id" }
     )
   if (error) throw error

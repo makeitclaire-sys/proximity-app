@@ -73,7 +73,7 @@ export default function MessagesScreen() {
       ])
 
       const profileMap = new Map(allProfiles.map(p => [p.id, p]))
-      const accepted = allConnections.filter(c => c.status === "accepted")
+      const accepted = allConnections.filter(c => c.status === "accepted" && c.mode === myProfile.mode)
 
       const convos: Conversation[] = accepted.map(conn => {
         const otherId = conn.senderId === myId ? conn.receiverId : conn.senderId
@@ -115,7 +115,9 @@ export default function MessagesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.brand}>Proximity</Text>
-        <Text style={styles.title}>Messages</Text>
+        <Text style={styles.title}>
+          {myProfile.mode === "professional" ? "Professional Messages" : "Messages"}
+        </Text>
 
         {loading ? (
           <ActivityIndicator size="small" color="#12101C" style={styles.loader} />

@@ -61,16 +61,16 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const handleSendHi = () => {
     if (myId == null) return
-    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", createdAt: "" })
-    createConnection(myId, person.id, "hi").catch(() => {
+    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", mode: profile.mode, createdAt: "" })
+    createConnection(myId, person.id, "hi", profile.mode).catch(() => {
       setConnection(null)
     })
   }
 
   const handleSendChat = () => {
     if (myId == null) return
-    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "chat", status: "pending", createdAt: "" })
-    createConnection(myId, person.id, "chat").catch(() => {
+    setConnection({ id: "", senderId: myId, receiverId: person.id, type: "chat", status: "pending", mode: profile.mode, createdAt: "" })
+    createConnection(myId, person.id, "chat", profile.mode).catch(() => {
       setConnection(null)
     })
     navigation.navigate("Chat", { personId: person.id, name: person.name })

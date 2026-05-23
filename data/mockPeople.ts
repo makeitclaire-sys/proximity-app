@@ -8,6 +8,7 @@ export type Person = {
   avoidTopics: string[]
   mode?: "social" | "professional"
   isVisible?: boolean
+  hasProfessionalMode?: boolean
   avatarUrl?: string
   // fields present in mock data but not required from Supabase
   status?: string
