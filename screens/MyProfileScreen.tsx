@@ -4,20 +4,31 @@ import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import { useUser } from "../context/UserContext"
+import { supabase } from "../lib/supabase"
+import { SOCIAL_COLOR, PRO_COLOR } from "../constants/modes"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
-const MODE_ACCENT: Record<"social" | "professional", string> = {
-  social: "#FF2D87",
-  professional: "#4F46E5",
-}
-
 export default function MyProfileScreen() {
   const navigation = useNavigation<NavProp>()
-  const { profile, updateProfile, toggleVisibility } = useUser()
+  const { profile, setMode, toggleVisibility } = useUser()
   const insets = useSafeAreaInsets()
-  const accent = MODE_ACCENT[profile.mode]
+  const accent = profile.mode === "professional" ? PRO_COLOR : SOCIAL_COLOR
   const initials = profile.name.split(" ").map(p => p[0]).join("")
+
+  const handleLogout = () => {
+    Alert.alert("Log out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.auth.signOut()
+          navigation.reset({ index: 0, routes: [{ name: "Welcome" }] })
+        },
+      },
+    ])
+  }
 
   const openSettings = () => {
     Alert.alert("Settings", undefined, [
@@ -26,6 +37,7 @@ export default function MyProfileScreen() {
         text: profile.isVisible ? "Go invisible" : "Go visible",
         onPress: toggleVisibility,
       },
+      { text: "Log out", style: "destructive", onPress: handleLogout },
       { text: "Cancel", style: "cancel" },
     ])
   }
@@ -36,7 +48,7 @@ export default function MyProfileScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Full-width hero — same structure as ProfileDetailScreen ── */}
+        {/* ── Hero photo — no overlay ── */}
         <View style={styles.hero}>
           {profile.avatarUrl ? (
             <Image
@@ -49,39 +61,42 @@ export default function MyProfileScreen() {
               <Text style={[styles.heroInitials, { color: "#FFFFFF" }]}>{initials}</Text>
             </View>
           )}
-
-          {/* Tint over whole image, heavier band at bottom for name readability */}
-          <View style={styles.heroOverlayFull} />
-          <View style={styles.heroOverlayBottom} />
-
-          {/* Name pinned to bottom of hero */}
-          <View style={[styles.heroContent, { paddingBottom: 20 }]}>
-            <Text style={styles.heroName}>{profile.name}, {profile.age}</Text>
-          </View>
         </View>
 
-        {/* Debug: confirm avatar URL is actually populated */}
-        <Text style={styles.debugText}>
-          Avatar URL: {profile.avatarUrl ?? "none"}
-        </Text>
+        {/* Name sits below the photo */}
+        <View style={styles.nameRow}>
+          <Text style={styles.heroName}>{profile.name}, {profile.age}</Text>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>MODE</Text>
           <View style={styles.modeToggle}>
             <Pressable
-              style={[styles.modeOption, profile.mode === "social" && styles.modeOptionActive]}
-              onPress={() => updateProfile({ mode: "social" })}
+              style={[
+                styles.modeOption,
+                profile.mode === "social" && { ...styles.modeOptionActive, backgroundColor: SOCIAL_COLOR },
+              ]}
+              onPress={() => setMode("social")}
             >
               <Text style={[styles.modeOptionText, profile.mode === "social" && styles.modeOptionTextActive]}>
                 Social
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.modeOption, profile.mode === "professional" && styles.modeOptionActive]}
-              onPress={() => updateProfile({ mode: "professional" })}
+              style={[
+                styles.modeOption,
+                profile.mode === "professional" && { ...styles.modeOptionActive, backgroundColor: PRO_COLOR },
+              ]}
+              onPress={() => {
+                if (!profile.hasProfessionalMode) {
+                  navigation.navigate("Paywall")
+                } else {
+                  setMode("professional")
+                }
+              }}
             >
               <Text style={[styles.modeOptionText, profile.mode === "professional" && styles.modeOptionTextActive]}>
-                Professional
+                Professional {!profile.hasProfessionalMode && "🔒"}
               </Text>
             </Pressable>
           </View>
@@ -150,9 +165,13 @@ export default function MyProfileScreen() {
         >
           <Text style={styles.primaryButtonText}>Edit profile</Text>
         </Pressable>
+
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutText}>Log out</Text>
+        </Pressable>
       </ScrollView>
 
-      {/* Brand + settings float over the hero, respecting safe area top */}
+      {/* Brand + settings float over the hero */}
       <View style={[styles.floatingHeader, { top: insets.top + 8 }]}>
         <Text style={styles.brand}>Proximity</Text>
         <Pressable onPress={openSettings} style={styles.settingsButton} hitSlop={8}>
@@ -173,7 +192,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // ── Hero (mirrors ProfileDetailScreen) ──
+  // ── Hero ──
   hero: {
     width: "100%",
     height: 330,
@@ -185,31 +204,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -2,
   },
-  heroOverlayFull: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.12)",
-  },
-  heroOverlayBottom: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    backgroundColor: "rgba(0,0,0,0.58)",
-  },
-  heroContent: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+
+  // Name below photo
+  nameRow: {
     paddingHorizontal: 22,
-    gap: 6,
+    marginTop: -4,
   },
   heroName: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "800",
-    color: "#FFFFFF",
-    lineHeight: 36,
+    color: "#12101C",
+    lineHeight: 34,
     letterSpacing: -0.3,
   },
 
@@ -227,6 +232,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   settingsButton: {
     padding: 4,
@@ -239,14 +247,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#FFFFFF",
     letterSpacing: 1,
-  },
-
-  // ── Debug ──
-  debugText: {
-    fontSize: 11,
-    color: "#A8A3B8",
-    paddingHorizontal: 24,
-    marginTop: -12,
   },
 
   // ── Sections ──
@@ -264,7 +264,6 @@ const styles = StyleSheet.create({
     color: "#A8A3B8",
   },
 
-  // Mode toggle
   modeToggle: {
     flexDirection: "row",
     borderWidth: 1,
@@ -279,7 +278,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   modeOptionActive: {
-    backgroundColor: "#12101C",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   modeOptionText: {
     fontSize: 14,
@@ -296,7 +299,6 @@ const styles = StyleSheet.create({
     color: "#4A4458",
   },
 
-  // Interests
   interestsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -316,7 +318,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Topics
   topicList: {
     gap: 8,
   },
@@ -331,7 +332,6 @@ const styles = StyleSheet.create({
     color: "#A8A3B8",
   },
 
-  // Visibility
   visibilityCard: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -363,7 +363,6 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
 
-  // Edit button
   primaryButton: {
     backgroundColor: "#12101C",
     paddingVertical: 16,
@@ -375,5 +374,16 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "600",
+  },
+
+  logoutButton: {
+    alignItems: "center",
+    paddingVertical: 12,
+    marginHorizontal: 24,
+  },
+  logoutText: {
+    fontSize: 15,
+    color: "#FF3B30",
+    fontWeight: "500",
   },
 })

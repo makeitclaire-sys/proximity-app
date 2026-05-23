@@ -11,6 +11,7 @@ type ProfileRow = {
   distance: string
   mode: "social" | "professional"
   is_visible: boolean
+  has_pro_mode: boolean
   interests: string[]
   talk_topics: string[]
   avoid_topics: string[]
@@ -25,6 +26,7 @@ type ProfileUpdates = {
   status?: string
   mode?: "social" | "professional"
   is_visible?: boolean
+  has_pro_mode?: boolean
   interests?: string[]
   talk_topics?: string[]
   avoid_topics?: string[]
@@ -44,6 +46,7 @@ function rowToPerson(row: ProfileRow): Person {
     bio: row.bio ?? "",
     mode: row.mode,
     isVisible: row.is_visible,
+    hasProfessionalMode: row.has_pro_mode ?? false,
     interests: row.interests ?? [],
     talkTopics: row.talk_topics ?? [],
     avoidTopics: row.avoid_topics ?? [],
@@ -60,26 +63,40 @@ export async function createProfile(
     name: string
     age: number
     bio: string
-    status: string
+    status?: string
     mode: "social" | "professional"
+    email: string
   }
 ): Promise<void> {
-  const { error } = await supabase
+  const row: Record<string, unknown> = {
+    id: userId,
+    name: data.name,
+    age: data.age,
+    bio: data.bio,
+    mode: data.mode,
+    email: data.email,
+    is_visible: true,
+    interests: [],
+    talk_topics: [],
+    avoid_topics: [],
+    conversation_starters: [],
+  }
+  if (data.status !== undefined) row.status = data.status
+
+  const { error } = await supabase.from("profiles").upsert(row)
+  if (error) throw new Error(error.message ?? JSON.stringify(error))
+}
+
+export async function getEmailByUsername(username: string): Promise<string | null> {
+  const { data, error } = await supabase
     .from("profiles")
-    .upsert({
-      id: userId,
-      name: data.name,
-      age: data.age,
-      bio: data.bio,
-      status: data.status,
-      mode: data.mode,
-      is_visible: true,
-      interests: [],
-      talk_topics: [],
-      avoid_topics: [],
-      conversation_starters: [],
-    })
-  if (error) throw error
+    .select("email")
+    .ilike("name", username.trim())
+    .limit(1)
+    .single()
+
+  if (error || !data) return null
+  return (data as { email: string | null }).email
 }
 
 export async function getProfiles(): Promise<Person[]> {
@@ -116,7 +133,7 @@ export async function updateProfile(id: string, updates: ProfileUpdates): Promis
 
   if (error) {
     console.error("[updateProfile] ERROR:", error.message, error)
-    throw error
+    throw new Error(error.message ?? JSON.stringify(error))
   }
 
   console.log("[updateProfile] success")

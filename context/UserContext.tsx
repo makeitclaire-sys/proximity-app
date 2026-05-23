@@ -12,6 +12,7 @@ export type UserProfile = {
   avoidTopics: string[]
   mode: "social" | "professional"
   isVisible: boolean
+  hasProfessionalMode: boolean
   supabaseId: string | null
   avatarUrl: string | null
 }
@@ -21,30 +22,23 @@ type UserContextType = {
   profileLoaded: boolean
   updateProfile: (updates: Partial<UserProfile>) => void
   refreshProfile: () => Promise<void>
+  setMode: (mode: "social" | "professional") => void
   toggleMode: () => void
   toggleVisibility: () => void
+  unlockProMode: () => Promise<void>
 }
 
-const CLAIRE_ID = "8c785cf7-3095-4ff8-9117-87c8c7f27102"
-
 const DEFAULT_PROFILE: UserProfile = {
-  name: "Alex T.",
-  age: 27,
-  bio: "Product designer with a side obsession for bouldering and fermented foods. Currently figuring out what the next chapter looks like.",
-  interests: ["Design", "Bouldering", "Food", "Music", "Travel"],
-  talkTopics: [
-    "Finding good coffee in new places",
-    "Side projects that went somewhere",
-    "What you're currently obsessing over",
-  ],
-  avoidTopics: [
-    "Crypto pitches",
-    "LinkedIn hustle culture",
-    "Networking for its own sake",
-  ],
+  name: "",
+  age: 0,
+  bio: "",
+  interests: [],
+  talkTopics: [],
+  avoidTopics: [],
   mode: "social",
   isVisible: true,
-  supabaseId: CLAIRE_ID,
+  hasProfessionalMode: false,
+  supabaseId: null,
   avatarUrl: null,
 }
 
@@ -55,8 +49,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [authUserId, setAuthUserId] = useState<string | null>(null)
 
-  // Authenticated user takes priority; fall back to CLAIRE_ID for demo/dev mode
-  const currentUserId = authUserId ?? CLAIRE_ID
+  const currentUserId = authUserId
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,15 +62,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshProfile = useCallback(async () => {
-    console.log("CURRENT USER ID:", currentUserId)
+    if (!currentUserId) {
+      setProfile(DEFAULT_PROFILE)
+      setProfileLoaded(true)
+      return
+    }
     try {
       const person = await getProfileById(currentUserId)
       if (!person) {
-        console.log("PROFILE LOAD ERROR: getProfileById returned null — check UUID and RLS policy")
         setProfileLoaded(true)
         return
       }
-      console.log("LOADED PROFILE:", person)
       setProfile(prev => ({
         ...prev,
         supabaseId: currentUserId,
@@ -89,6 +84,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         avoidTopics: person.avoidTopics,
         mode: person.mode ?? prev.mode,
         isVisible: person.isVisible ?? prev.isVisible,
+        hasProfessionalMode: person.hasProfessionalMode ?? false,
         avatarUrl: person.avatarUrl ?? null,
       }))
     } catch (err) {
@@ -105,14 +101,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const updateProfile = (updates: Partial<UserProfile>) =>
     setProfile(prev => ({ ...prev, ...updates }))
 
-  const toggleMode = () => {
-    const newMode = profile.mode === "social" ? "professional" : "social"
-    setProfile(prev => ({ ...prev, mode: newMode }))
+  const setMode = (mode: "social" | "professional") => {
+    setProfile(prev => ({ ...prev, mode }))
     if (profile.supabaseId != null) {
-      saveProfileField(profile.supabaseId, { mode: newMode }).catch(err =>
-        console.error("[toggleMode] save error:", err)
+      saveProfileField(profile.supabaseId, { mode }).catch(err =>
+        console.error("[setMode] save error:", err)
       )
     }
+  }
+
+  const toggleMode = () => {
+    const newMode = profile.mode === "social" ? "professional" : "social"
+    setMode(newMode)
   }
 
   const toggleVisibility = () => {
@@ -125,8 +125,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const unlockProMode = async () => {
+    if (!profile.supabaseId) return
+    await saveProfileField(profile.supabaseId, { has_pro_mode: true })
+    setProfile(prev => ({ ...prev, hasProfessionalMode: true }))
+  }
+
   return (
-    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, toggleMode, toggleVisibility }}>
+    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, setMode, toggleMode, toggleVisibility, unlockProMode }}>
       {children}
     </UserContext.Provider>
   )

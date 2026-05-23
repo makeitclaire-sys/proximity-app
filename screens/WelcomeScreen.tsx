@@ -1,4 +1,5 @@
-import { SafeAreaView, View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../navigation/RootNavigator'
 
@@ -6,7 +7,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>
 
 export default function WelcomeScreen({ navigation }: Props) {
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.backgroundPink} />
       <View style={styles.backgroundBlue} />
       <View style={styles.backgroundLime} />
@@ -17,6 +18,12 @@ export default function WelcomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.centerContent}>
+          <Image
+            source={require('../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+
           <Text style={styles.title}>
             Meet the people{'\n'}
             in the room.
@@ -31,14 +38,19 @@ export default function WelcomeScreen({ navigation }: Props) {
         <View style={styles.footer}>
           <Pressable
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('Phone')}
+            onPress={() => navigation.navigate('Signup')}
           >
             <Text style={styles.primaryButtonText}>Create your account</Text>
           </Pressable>
 
-          <Pressable onPress={() => navigation.replace('MainTabs')}>
-            <Text style={styles.secondaryButtonText}>Skip to the demo</Text>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.secondaryButtonText}>Log in</Text>
           </Pressable>
+
+
         </View>
       </View>
     </SafeAreaView>
@@ -68,6 +80,11 @@ const styles = StyleSheet.create({
   centerContent: {
     gap: 20,
   },
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: 'center',
+  },
   title: {
     fontSize: 44,
     lineHeight: 48,
@@ -94,11 +111,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: '#12101C',
+    paddingVertical: 15,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
   secondaryButtonText: {
-    textAlign: 'center',
-    color: '#4A4458',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+    color: '#12101C',
+    fontSize: 15,
+    fontWeight: '600',
   },
   backgroundPink: {
     position: 'absolute',

@@ -1,8 +1,13 @@
 import HomeScreen from '../screens/HomeScreen'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { navigationRef } from './navigationRef'
+import { supabase } from '../lib/supabase'
 import WelcomeScreen from '../screens/WelcomeScreen'
-import PhoneScreen from '../screens/PhoneEntry'
+import SignupScreen from '../screens/SignupScreen'
+import EmailVerifyScreen from '../screens/EmailVerifyScreen'
+import PasswordSetupScreen from '../screens/PasswordSetupScreen'
+import LoginScreen from '../screens/LoginScreen'
 import UsernameScreen from '../screens/UsernameScreen'
 import BirthdayScreen from '../screens/BirthdayScreen'
 import SelfieScreen from '../screens/SelfieScreen'
@@ -12,49 +17,43 @@ import DoneScreen from '../screens/DoneScreen'
 import ProfileDetailScreen from '../screens/ProfileDetailScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
 import ChatScreen from '../screens/ChatScreen'
+import PaywallScreen from '../screens/PaywallScreen'
 import MainTabNavigator from './MainTabNavigator'
-import type { Person } from '../data/mockPeople'
+import type { RootStackParamList } from './types'
 
-export type RootStackParamList = {
-  Welcome: undefined
-  Phone: undefined
-  Username: undefined
-  Birthday: undefined
-  Selfie: undefined
-  ModePicker: undefined
-  Basics: { mode?: 'social' | 'professional' } | undefined
-  Done: { mode: 'social' | 'professional' }
-  Home: undefined
-  MainTabs: undefined
-  ProfileDetail: { personId: string; profile?: Person }
-  EditProfile: undefined
-  Chat: { personId: string; name: string }
-}
+export type { RootStackParamList }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
 export default function RootNavigator() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="Welcome"
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="Phone" component={PhoneScreen} />
-<Stack.Screen name="Username" component={UsernameScreen} />
-        <Stack.Screen name="Birthday" component={BirthdayScreen} />
-        <Stack.Screen name="Selfie" component={SelfieScreen} />
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          navigationRef.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
+        }
+      }}
+    >
+      <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Welcome"    component={WelcomeScreen} />
+        <Stack.Screen name="Signup"     component={SignupScreen} />
+        <Stack.Screen name="EmailVerify"    component={EmailVerifyScreen} />
+        <Stack.Screen name="PasswordSetup"  component={PasswordSetupScreen} />
+        <Stack.Screen name="Login"          component={LoginScreen} />
+        <Stack.Screen name="Username"   component={UsernameScreen} />
+        <Stack.Screen name="Birthday"   component={BirthdayScreen} />
+        <Stack.Screen name="Selfie"     component={SelfieScreen} />
         <Stack.Screen name="ModePicker" component={ModePickerScreen} />
-        <Stack.Screen name="Basics" component={BasicsScreen} />
-        <Stack.Screen name="Done" component={DoneScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+        <Stack.Screen name="Basics"     component={BasicsScreen} />
+        <Stack.Screen name="Done"       component={DoneScreen} />
+        <Stack.Screen name="Home"       component={HomeScreen} />
+        <Stack.Screen name="MainTabs"   component={MainTabNavigator} />
         <Stack.Screen name="ProfileDetail" component={ProfileDetailScreen} />
-        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
+        <Stack.Screen name="Chat"          component={ChatScreen} />
+        <Stack.Screen name="Paywall"        component={PaywallScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )

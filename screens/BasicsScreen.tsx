@@ -19,7 +19,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Basics'>
 
 export default function BasicsScreen({ navigation, route }: Props) {
   const { setStatus: saveStatus, setBio: saveBio } = useSignup()
-  // Try to read mode from route params; default to 'social'
   const mode = route.params?.mode || 'social'
   const accent = mode === 'professional' ? '#4F46E5' : '#FF2D87'
 
@@ -115,11 +114,12 @@ export default function BasicsScreen({ navigation, route }: Props) {
                   maxLength={160}
                   multiline
                   textAlignVertical="top"
-                  returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
+                  returnKeyType="next"
                   blurOnSubmit
                 />
               </View>
+
+
             </ScrollView>
 
             <View style={styles.footer}>
