@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
 import { useSignup } from '../context/SignupContext'
+import { useUser } from '../context/UserContext'
 import { createProfile, updateProfile } from '../services/profileService'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Done'>
@@ -11,6 +12,7 @@ type Stage = 'creating' | 'error'
 
 export default function DoneScreen({ navigation }: Props) {
   const { userId, email, username, age, mode, status, bio, reset } = useSignup()
+  const { refreshProfile } = useUser()
 
   const [stage, setStage]       = useState<Stage>('creating')
   const [errorMsg, setErrorMsg] = useState('')
@@ -27,6 +29,9 @@ export default function DoneScreen({ navigation }: Props) {
       if (status) {
         await updateProfile(userId, { status }).catch(() => {})
       }
+      // Pull the freshly-created profile into UserContext so MainTabs
+      // sees the linked supabaseId immediately (avoids "Profile not linked").
+      await refreshProfile()
       reset()
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
     } catch (err: unknown) {

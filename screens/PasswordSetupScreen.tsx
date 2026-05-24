@@ -11,7 +11,10 @@ import { supabase } from '../lib/supabase'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PasswordSetup'>
 
-export default function PasswordSetupScreen({ navigation }: Props) {
+export default function PasswordSetupScreen({ navigation, route }: Props) {
+  const mode = route.params?.mode ?? 'setup'
+  const isReset = mode === 'reset'
+
   const [password, setPassword]       = useState('')
   const [confirm, setConfirm]         = useState('')
   const [showPass, setShowPass]       = useState(false)
@@ -29,7 +32,13 @@ export default function PasswordSetupScreen({ navigation }: Props) {
     try {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
-      navigation.navigate('Username')
+      if (isReset) {
+        // Existing user just reset their password — drop them into the app.
+        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
+      } else {
+        // Brand-new signup — continue collecting profile info.
+        navigation.navigate('Username')
+      }
     } catch (err: unknown) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not set password.')
     } finally {
@@ -47,8 +56,12 @@ export default function PasswordSetupScreen({ navigation }: Props) {
             </Pressable>
 
             <View style={styles.body}>
-              <Text style={styles.title}>Create a password</Text>
-              <Text style={styles.subtitle}>At least 8 characters. You'll use this to log in.</Text>
+              <Text style={styles.title}>{isReset ? 'Reset your password' : 'Create a password'}</Text>
+              <Text style={styles.subtitle}>
+                {isReset
+                  ? 'Choose a new password. At least 8 characters.'
+                  : "At least 8 characters. You'll use this to log in."}
+              </Text>
 
               <View style={styles.fieldGroup}>
                 <View style={styles.inputRow}>

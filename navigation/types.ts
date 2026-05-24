@@ -4,7 +4,7 @@ export type RootStackParamList = {
   Welcome: undefined
   Signup: undefined
   EmailVerify: undefined
-  PasswordSetup: undefined
+  PasswordSetup: { mode?: 'setup' | 'reset' } | undefined
   Login: undefined
   Username: undefined
   Birthday: undefined

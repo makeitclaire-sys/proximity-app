@@ -10,13 +10,28 @@ import { navigationRef } from "./navigation/navigationRef"
 function useDeepLinkAuth() {
   useEffect(() => {
     const handle = async (url: string) => {
-      const { queryParams } = Linking.parse(url)
-      const code = queryParams?.code
-      if (code && typeof code === "string") {
-        await supabase.auth.exchangeCodeForSession(code)
-        if (navigationRef.isReady()) {
-          navigationRef.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
-        }
+      const parsed = Linking.parse(url)
+      const code = parsed.queryParams?.code
+      if (!code || typeof code !== "string") return
+
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        console.warn("Auth code exchange failed:", error.message)
+        return
+      }
+
+      if (!navigationRef.isReady()) return
+
+      // Path tells us which flow we're in. "reset-password" comes from
+      // resetPasswordForEmail; anything else is a normal login/verify.
+      const isRecovery = parsed.path === "reset-password"
+      if (isRecovery) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'PasswordSetup', params: { mode: 'reset' } }],
+        })
+      } else {
+        navigationRef.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
       }
     }
 

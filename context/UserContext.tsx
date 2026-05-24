@@ -67,6 +67,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setProfileLoaded(true)
       return
     }
+    // Always set supabaseId from the auth session, even if the profile
+    // row hasn't been created yet (mid-signup). Otherwise downstream
+    // screens think the user isn't linked and show "Profile not linked".
+    setProfile(prev => ({ ...prev, supabaseId: currentUserId }))
     try {
       const person = await getProfileById(currentUserId)
       if (!person) {

@@ -4,6 +4,7 @@ import {
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView,
   ActivityIndicator, Alert,
 } from 'react-native'
+import * as Linking from 'expo-linking'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
@@ -72,7 +73,9 @@ export default function LoginScreen({ navigation }: Props) {
         Alert.alert('Not found', 'No account found with that username or email.')
         return
       }
-      const { error } = await supabase.auth.resetPasswordForEmail(email)
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: Linking.createURL('reset-password'),
+      })
       if (error) throw error
       setStage('forgot_sent')
     } catch (err: unknown) {
