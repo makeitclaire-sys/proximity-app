@@ -18,6 +18,8 @@ import ProfileDetailScreen from '../screens/ProfileDetailScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
 import ChatScreen from '../screens/ChatScreen'
 import PaywallScreen from '../screens/PaywallScreen'
+import CreateRoomScreen from '../screens/CreateRoomScreen'
+import JoinRoomScreen from '../screens/JoinRoomScreen'
 import MainTabNavigator from './MainTabNavigator'
 import type { RootStackParamList } from './types'
 
@@ -54,6 +56,8 @@ export default function RootNavigator() {
         <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
         <Stack.Screen name="Chat"          component={ChatScreen} />
         <Stack.Screen name="Paywall"        component={PaywallScreen} />
+        <Stack.Screen name="CreateRoom"     component={CreateRoomScreen} />
+        <Stack.Screen name="JoinRoom"       component={JoinRoomScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )

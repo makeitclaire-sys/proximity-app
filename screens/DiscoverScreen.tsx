@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { SafeAreaView, View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -6,7 +6,9 @@ import { RootStackParamList } from "../navigation/RootNavigator"
 import type { Person } from "../data/mockPeople"
 import { useInteractions } from "../context/InteractionContext"
 import { useUser } from "../context/UserContext"
+import { useRoom } from "../context/RoomContext"
 import { getProfiles } from "../services/profileService"
+import { supabase } from "../lib/supabase"
 import { SOCIAL_COLOR, PRO_COLOR } from "../constants/modes"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
@@ -15,12 +17,14 @@ export default function DiscoverScreen() {
   const navigation = useNavigation<NavProp>()
   const { hiddenUsers } = useInteractions()
   const { profile, setMode } = useUser()
+  const { room, roomLoaded, members, leaveRoom } = useRoom()
 
   const [profiles, setProfiles] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
 
   const activeMode = profile.mode
   const accentColor = activeMode === "professional" ? PRO_COLOR : SOCIAL_COLOR
+  const memberIds = new Set(members.map(m => m.userId))
 
   useFocusEffect(useCallback(() => {
     let cancelled = false
@@ -34,6 +38,28 @@ export default function DiscoverScreen() {
     return () => { cancelled = true }
   }, []))
 
+  // Live visibility updates — when any profile toggles is_visible, remove or restore them instantly
+  useEffect(() => {
+    const channel = supabase
+      .channel("discover-profiles")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const row = payload.new as { id: string; is_visible: boolean; mode: string }
+          setProfiles(prev =>
+            prev.map(p =>
+              p.id === row.id
+                ? { ...p, isVisible: row.is_visible, mode: row.mode as "social" | "professional" }
+                : p
+            )
+          )
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   const switchMode = (mode: "social" | "professional") => {
     if (mode === "professional" && !profile.hasProfessionalMode) {
       navigation.navigate("Paywall")
@@ -45,7 +71,9 @@ export default function DiscoverScreen() {
   const visiblePeople = profiles.filter(p =>
     !hiddenUsers.includes(p.id) &&
     p.id !== profile.supabaseId &&
-    (p.mode ?? "social") === activeMode
+    (p.mode ?? "social") === activeMode &&
+    p.isVisible !== false &&
+    memberIds.has(p.id)
   )
 
   return (
@@ -53,74 +81,103 @@ export default function DiscoverScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.brand}>Proximity</Text>
 
-        {/* Mode tabs */}
-        <View style={styles.modeTabs}>
-          <Pressable
-            style={[styles.modeTab, activeMode === "social" && { ...styles.modeTabActive, backgroundColor: SOCIAL_COLOR }]}
-            onPress={() => switchMode("social")}
-          >
-            <Text style={[styles.modeTabText, activeMode === "social" && styles.modeTabTextActive]}>
-              Social
+        {!roomLoaded ? (
+          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+        ) : !room ? (
+          <View style={styles.noRoomState}>
+            <Text style={styles.noRoomEmoji}>📍</Text>
+            <Text style={styles.noRoomTitle}>You're not in a room yet.</Text>
+            <Text style={styles.noRoomSubtitle}>
+              Join or create one to see who's nearby.
             </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modeTab, activeMode === "professional" && { ...styles.modeTabActive, backgroundColor: PRO_COLOR }]}
-            onPress={() => switchMode("professional")}
-          >
-            <Text style={[styles.modeTabText, activeMode === "professional" && styles.modeTabTextActive]}>
-              Professional {!profile.hasProfessionalMode && "🔒"}
-            </Text>
-          </Pressable>
-        </View>
-
-        <Text style={[styles.title, { color: accentColor }]}>
-          {activeMode === "social" ? "Nearby people" : "Professionals nearby"}
-        </Text>
-
-        {!profile.isVisible && (
-          <View style={styles.invisibleBanner}>
-            <Text style={styles.invisibleBannerText}>
-              You are invisible. Others cannot see you.
-            </Text>
-          </View>
-        )}
-
-        {loading ? (
-          <ActivityIndicator size="small" color={accentColor} style={styles.loader} />
-        ) : visiblePeople.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>{activeMode === "social" ? "👀" : "💼"}</Text>
-            <Text style={styles.emptyTitle}>No {activeMode === "social" ? "people" : "professionals"} nearby right now.</Text>
-            <Text style={styles.emptySubtitle}>Check back soon.</Text>
+            <Pressable style={styles.primaryButton} onPress={() => navigation.navigate("CreateRoom")}>
+              <Text style={styles.primaryButtonText}>Create a room</Text>
+            </Pressable>
+            <Pressable style={styles.ghostButton} onPress={() => navigation.navigate("JoinRoom")}>
+              <Text style={styles.ghostButtonText}>Join with a code</Text>
+            </Pressable>
           </View>
         ) : (
-          <View style={styles.list}>
-            {visiblePeople.map((person, index) => (
-              <Pressable
-                key={person.id ?? index}
-                style={[styles.card, { borderColor: accentColor + "30" }]}
-                onPress={() => navigation.navigate("ProfileDetail", { personId: person.id, profile: person })}
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.name}>{person.name}, {person.age}</Text>
-                  {person.distance ? <Text style={styles.distance}>{person.distance}</Text> : null}
-                </View>
-                {person.status ? <Text style={styles.status}>{person.status}</Text> : null}
-                {person.bio ? (
-                  <Text style={styles.bio} numberOfLines={2}>{person.bio}</Text>
-                ) : null}
-                {person.interests.length > 0 && (
-                  <View style={styles.chips}>
-                    {person.interests.slice(0, 3).map((interest, i) => (
-                      <View key={`${interest}-${i}`} style={[styles.chip, { backgroundColor: accentColor + "15" }]}>
-                        <Text style={[styles.chipText, { color: accentColor }]}>{interest}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+          <>
+            <View style={styles.roomBanner}>
+              <View style={styles.roomBannerInfo}>
+                <View style={styles.roomBannerDot} />
+                <Text style={styles.roomBannerName} numberOfLines={1}>{room.name}</Text>
+              </View>
+              <Pressable onPress={leaveRoom} hitSlop={8}>
+                <Text style={styles.leaveText}>Leave</Text>
               </Pressable>
-            ))}
-          </View>
+            </View>
+
+            <View style={styles.modeTabs}>
+              <Pressable
+                style={[styles.modeTab, activeMode === "social" && { ...styles.modeTabActive, backgroundColor: SOCIAL_COLOR }]}
+                onPress={() => switchMode("social")}
+              >
+                <Text style={[styles.modeTabText, activeMode === "social" && styles.modeTabTextActive]}>
+                  Social
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modeTab, activeMode === "professional" && { ...styles.modeTabActive, backgroundColor: PRO_COLOR }]}
+                onPress={() => switchMode("professional")}
+              >
+                <Text style={[styles.modeTabText, activeMode === "professional" && styles.modeTabTextActive]}>
+                  Professional {!profile.hasProfessionalMode && "🔒"}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.title, { color: accentColor }]}>
+              {activeMode === "social" ? "Nearby people" : "Professionals nearby"}
+            </Text>
+
+            {!profile.isVisible && (
+              <View style={styles.invisibleBanner}>
+                <Text style={styles.invisibleBannerText}>
+                  You are invisible. Others cannot see you.
+                </Text>
+              </View>
+            )}
+
+            {loading ? (
+              <ActivityIndicator size="small" color={accentColor} style={styles.loader} />
+            ) : visiblePeople.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>{activeMode === "social" ? "👀" : "💼"}</Text>
+                <Text style={styles.emptyTitle}>No {activeMode === "social" ? "people" : "professionals"} nearby right now.</Text>
+                <Text style={styles.emptySubtitle}>Check back soon.</Text>
+              </View>
+            ) : (
+              <View style={styles.list}>
+                {visiblePeople.map((person, index) => (
+                  <Pressable
+                    key={person.id ?? index}
+                    style={[styles.card, { borderColor: accentColor + "30" }]}
+                    onPress={() => navigation.navigate("ProfileDetail", { personId: person.id, profile: person })}
+                  >
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.name}>{person.name}, {person.age}</Text>
+                      {person.distance ? <Text style={styles.distance}>{person.distance}</Text> : null}
+                    </View>
+                    {person.status ? <Text style={styles.status}>{person.status}</Text> : null}
+                    {person.bio ? (
+                      <Text style={styles.bio} numberOfLines={2}>{person.bio}</Text>
+                    ) : null}
+                    {person.interests.length > 0 && (
+                      <View style={styles.chips}>
+                        {person.interests.slice(0, 3).map((interest, i) => (
+                          <View key={`${interest}-${i}`} style={[styles.chip, { backgroundColor: accentColor + "15" }]}>
+                            <Text style={[styles.chipText, { color: accentColor }]}>{interest}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -256,5 +313,87 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: "#4A4458",
     textAlign: "center",
+  },
+  noRoomState: {
+    alignItems: "center",
+    paddingTop: 80,
+    gap: 16,
+  },
+  noRoomEmoji: {
+    fontSize: 44,
+  },
+  noRoomTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#12101C",
+    textAlign: "center",
+  },
+  noRoomSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#4A4458",
+    textAlign: "center",
+    maxWidth: 260,
+  },
+  primaryButton: {
+    backgroundColor: "#12101C",
+    paddingVertical: 15,
+    paddingHorizontal: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    width: "100%",
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  ghostButton: {
+    borderWidth: 1.5,
+    borderColor: "#12101C",
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    width: "100%",
+  },
+  ghostButtonText: {
+    color: "#12101C",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  roomBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F0EEF5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  roomBannerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    marginRight: 12,
+  },
+  roomBannerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#06D6A0",
+    flexShrink: 0,
+  },
+  roomBannerName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#12101C",
+    flexShrink: 1,
+  },
+  leaveText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#A8A3B8",
   },
 })

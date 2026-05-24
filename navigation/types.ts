@@ -18,6 +18,8 @@ export type RootStackParamList = {
   EditProfile: undefined
   Chat: { personId: string; name: string }
   Paywall: undefined
+  CreateRoom: undefined
+  JoinRoom: undefined
 }
 
 export type TabParamList = {

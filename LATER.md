@@ -40,3 +40,63 @@ Things we deliberately defer. Add to this file anytime you notice something you'
 ## react-native-country-picker-modal removed
 
 We deleted `screens/PhoneEntry.tsx`, `screens/CodeScreen.tsx`, `components/CountryPickerModal.tsx`, `data/countries.ts`, and the `react-native-country-picker-modal` dep. If we ever bring back phone signup, build a fresh country picker — the old one expected React 16 and conflicts with React 19.
+
+---
+
+## Messages INSERT RLS is too permissive for App Store
+
+**Issue:** Current INSERT policy on `messages` lets any authed user send to any user. The app enforces "must have accepted connection" at the UI layer only — a determined user with their auth token could bypass it and spam strangers.
+
+**Why it's currently fine:** TestFlight beta is closed (people you know). UI-layer enforcement is good enough.
+
+**Fix before App Store launch:**
+Replace the INSERT policy with one that EXISTS-checks an accepted connection in either direction between sender and receiver. Outline:
+
+```sql
+DROP POLICY "send own messages" ON messages;
+CREATE POLICY "send to accepted contacts only" ON messages FOR INSERT
+  WITH CHECK (
+    auth.uid() = sender_id
+    AND EXISTS (
+      SELECT 1 FROM connections
+      WHERE status = 'accepted'
+        AND (
+          (sender_id = auth.uid() AND receiver_id = messages.receiver_id)
+          OR (receiver_id = auth.uid() AND sender_id = messages.receiver_id)
+        )
+    )
+  );
+```
+
+---
+
+## Connections unique constraint should include `mode`
+
+**Issue:** Current unique constraint on `connections` is `(sender_id, receiver_id)`. Once a user has both Social and Pro modes unlocked, sending a Pro hi to the same person they already sent a Social hi to would overwrite the Social connection (because the upsert conflict key matches the constraint).
+
+**Why it's currently fine:** Most users won't have both modes unlocked. Rare to hit in practice.
+
+**Fix:** Change the unique constraint to `(sender_id, receiver_id, mode)`. Update the upsert `onConflict` key in `services/connectionService.ts`. Also update `getConnectionWith()` to take a mode parameter — call sites in ChatScreen need to know which mode's connection to fetch.
+
+---
+
+## Social mode friction with required rooms — validate during beta
+
+**Issue:** Current MVP requires every Discover view to be scoped to a room you've joined. Professional mode benefits clearly (events, dinners, conferences are naturally room-shaped). Social mode is less obvious — a person at a coffee shop has no host to set up a room.
+
+**Why it's still the right MVP choice:**
+- Privacy discipline: visibility is always a deliberate opt-in. Without rooms, Proximity drifts toward Happn/Tinder Nearby — the exact pattern the design plan rejects.
+- Spam prevention: a stranger can't ping you unless you've both joined the same room.
+- Brand alignment: "presence is temporary", "leave the room anytime", "in this room now" only mean something if rooms are the unit.
+
+**Watch for during beta:**
+- Do Social mode users actually create or join rooms, or do they bounce off the empty state?
+- Median rooms-joined per Social user in the first week. Target: ≥1 per session.
+
+**If Social users skip rooms:**
+The V2 evolution path (do **not** ship in V1):
+1. **Implicit/standing rooms** — Proximity creates standing rooms for natural contexts: neighborhoods ("Williamsburg Tonight"), recurring venues, recurring meetups. Users join with one tap, no code-hunting. Same opt-in discipline, way lower friction.
+2. **Personal "I'm out" status** — a lightweight presence signal ("available to meet for the next 2 hours") that surfaces you to friends-of-friends only, not strangers. Adjacent to rooms, not a replacement.
+3. Keep rooms required for Professional contexts (where curation matters most).
+
+**Mistake to avoid:** splitting Social and Professional into fundamentally different products. Doubles design surface, codebase, testing. Loses the clean "one app, two modes" pitch.

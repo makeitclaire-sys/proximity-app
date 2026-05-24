@@ -136,28 +136,27 @@ export default function MyProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>VISIBILITY</Text>
-          <View style={styles.visibilityCard}>
-            <View style={styles.visibilityRow}>
-              <View style={[styles.visibilityDot, { backgroundColor: profile.isVisible ? "#06D6A0" : "#A8A3B8" }]} />
-              <Text style={styles.visibilityLabel}>
-                {profile.isVisible ? "Visible to nearby people" : "Hidden"}
+        <Pressable
+          style={[styles.visibilityCard, { borderColor: profile.isVisible ? "#06D6A0" : "#EEEBF2" }]}
+          onPress={toggleVisibility}
+        >
+          <View style={styles.visibilityRow}>
+            <View style={styles.visibilityTextGroup}>
+              <Text style={[styles.visibilityStatus, { color: profile.isVisible ? "#06D6A0" : "#A8A3B8" }]}>
+                {profile.isVisible ? "Visible in rooms" : "Invisible"}
               </Text>
-              <Switch
-                value={profile.isVisible}
-                onValueChange={toggleVisibility}
-                trackColor={{ false: "#EEEBF2", true: "#12101C" }}
-                thumbColor="#FFFFFF"
-              />
+              <Text style={styles.visibilityTagline}>
+                Visible only while checked in. Leave the room anytime.
+              </Text>
             </View>
-            <Text style={styles.visibilityHint}>
-              {profile.isVisible
-                ? "You're discoverable by people in the same space."
-                : "You won't appear to anyone nearby."}
-            </Text>
+            <Switch
+              value={profile.isVisible}
+              onValueChange={toggleVisibility}
+              trackColor={{ false: "#EEEBF2", true: "#06D6A0" }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-        </View>
+        </Pressable>
 
         <Pressable
           style={styles.primaryButton}
@@ -334,33 +333,29 @@ const styles = StyleSheet.create({
 
   visibilityCard: {
     backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EEEBF2",
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 24,
   },
   visibilityRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
   },
-  visibilityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  visibilityLabel: {
+  visibilityTextGroup: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#12101C",
+    gap: 4,
   },
-  visibilityHint: {
+  visibilityStatus: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  visibilityTagline: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 18,
     color: "#4A4458",
-    marginLeft: 16,
   },
 
   primaryButton: {

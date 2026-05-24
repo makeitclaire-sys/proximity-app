@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Animated,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -42,6 +43,45 @@ function sameDay(a: string, b: string): boolean {
     da.getDate() === db.getDate()
 }
 
+function TypingIndicator() {
+  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current]
+
+  useEffect(() => {
+    const animations = dots.map((dot, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 150),
+          Animated.timing(dot, { toValue: 1, duration: 250, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 250, useNativeDriver: true }),
+          Animated.delay(450 - i * 150),
+        ])
+      )
+    )
+    const anim = Animated.parallel(animations)
+    anim.start()
+    return () => anim.stop()
+  }, [])
+
+  return (
+    <View style={styles.bubbleRowThem}>
+      <View style={[styles.bubbleThem, { paddingHorizontal: 16, paddingVertical: 12 }]}>
+        <View style={{ flexDirection: "row", gap: 5, alignItems: "center" }}>
+          {dots.map((dot, i) => (
+            <Animated.View
+              key={i}
+              style={{
+                width: 7, height: 7, borderRadius: 3.5,
+                backgroundColor: "#A8A3B8",
+                transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }],
+              }}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  )
+}
+
 export default function ChatScreen({ navigation, route }: Props) {
   const { personId, name } = route.params
   const scrollRef = useRef<ScrollView>(null)
@@ -53,6 +93,9 @@ export default function ChatScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true)
   const [inputText, setInputText] = useState("")
   const [sending, setSending] = useState(false)
+  const [isOtherTyping, setIsOtherTyping] = useState(false)
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (myId == null) {
@@ -119,6 +162,34 @@ export default function ChatScreen({ navigation, route }: Props) {
     }
   }, [myId, personId])
 
+  // Typing broadcast — both sides join the same channel via sorted IDs
+  useEffect(() => {
+    if (!myId) return
+    const name = `typing-${[myId, personId].sort().join("-")}`
+    const ch = supabase
+      .channel(name)
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload.userId === personId) setIsOtherTyping(payload.isTyping)
+      })
+      .subscribe()
+    typingChannelRef.current = ch
+    return () => {
+      supabase.removeChannel(ch)
+      typingChannelRef.current = null
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    }
+  }, [myId, personId])
+
+  const handleTyping = (text: string) => {
+    setInputText(text)
+    if (!myId || !typingChannelRef.current) return
+    typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: true } })
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => {
+      typingChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: false } })
+    }, 2000)
+  }
+
   const canChat =
     connection !== "loading" &&
     connection !== null &&
@@ -132,6 +203,9 @@ export default function ChatScreen({ navigation, route }: Props) {
   const send = async () => {
     const trimmed = inputText.trim()
     if (!trimmed || !canChat || myId == null || sending) return
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: false } })
 
     setInputText("")
     setSending(true)
@@ -243,6 +317,7 @@ export default function ChatScreen({ navigation, route }: Props) {
                 )
               })
             )}
+            {isOtherTyping && canChat && <TypingIndicator />}
           </ScrollView>
         )}
 
@@ -251,7 +326,7 @@ export default function ChatScreen({ navigation, route }: Props) {
             <TextInput
               style={[styles.input, !canChat && styles.inputDisabled]}
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleTyping}
               placeholder={canChat ? "Message..." : "Accept connection to chat"}
               placeholderTextColor="#A8A3B8"
               returnKeyType="send"

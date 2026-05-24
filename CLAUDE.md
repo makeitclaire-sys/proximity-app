@@ -36,7 +36,7 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 |---|---|---|
 | 1. Foundation fixes | 1–2 | ✅ Complete (compressed to Day 1) |
 | 2. Realtime chat + visibility | 3–4 | ✅ Complete (compressed) |
-| 3. Minimal rooms | 5–7 | 🟡 Days 5–6 done (schema, service layer, CreateRoom + JoinRoom screens, Discover gate); Day 7 next (room-scoped Discover filtering + leave room flow) |
+| 3. Minimal rooms | 5–7 | ✅ Complete — schema, service layer, CreateRoom + JoinRoom screens, Discover gate, room-scoped filtering, leave-room flow |
 | 4. Block/report + polish | 8–9 | ⏳ Pending |
 | 5. TestFlight build #1 | 10–11 | ⏳ Pending |
 | 6. Iterate + TestFlight #2 | 12–14 | ⏳ Pending |
@@ -51,7 +51,7 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 - **Messages.** Realtime messages table with INSERT subscription. ChatScreen wired with optimistic sends. MessagesScreen lists conversations.
 - **Visibility.** Toggle in MyProfile writes `profiles.is_visible`. Discover filters out invisible users.
 - **Rooms (data layer).** `rooms` and `room_members` tables exist with RLS. `roomService.ts` has createRoom, joinRoom, leaveRoom, closeRoom, getCurrentRoom, getRoomMembers. `RoomContext` exposes `useRoom()`.
-- **Rooms (UI — Day 6).** `CreateRoomScreen` and `JoinRoomScreen` wired into `RootNavigator`. Discover gates on `useRoom().room`: if not in a room shows "Create a room" / "Join with a code" empty state; if in a room shows the people list (room-scoped filtering is Day 7).
+- **Rooms (UI — Days 6–7).** `CreateRoomScreen` and `JoinRoomScreen` wired into `RootNavigator`. Discover gates on `useRoom().room`: no room → "Create a room" / "Join with a code" empty state; in a room → room banner (name + live dot + Leave button) + people list filtered to current room members only (`memberIds.has(p.id)`). Leaving resets context and snaps back to the gate automatically.
 
 ## Database schema
 
@@ -216,4 +216,4 @@ At the end of every working session:
 
 ---
 
-*Last updated: end of Day 6 (Phase 3 in progress). Day 7 next: room-scoped Discover filtering (only show members of current room) + leave room flow.*
+*Last updated: end of Day 7. Phase 3 (Minimal rooms) complete. Phase 4 next: block/report + polish (Days 8–9).*

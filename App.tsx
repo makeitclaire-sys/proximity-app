@@ -4,6 +4,7 @@ import RootNavigator from "./navigation/RootNavigator"
 import { InteractionProvider } from "./context/InteractionContext"
 import { UserProvider } from "./context/UserContext"
 import { SignupProvider } from "./context/SignupContext"
+import { RoomProvider } from "./context/RoomContext"
 import { supabase } from "./lib/supabase"
 import { navigationRef } from "./navigation/navigationRef"
 
@@ -48,7 +49,9 @@ export default function App() {
     <UserProvider>
       <SignupProvider>
         <InteractionProvider>
-          <RootNavigator />
+          <RoomProvider>
+            <RootNavigator />
+          </RoomProvider>
         </InteractionProvider>
       </SignupProvider>
     </UserProvider>

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import DiscoverScreen from '../screens/DiscoverScreen'
@@ -5,6 +6,8 @@ import ConnectionsScreen from '../screens/ConnectionsScreen'
 import MessagesScreen from '../screens/MessagesScreen'
 import MyProfileScreen from '../screens/MyProfileScreen'
 import type { TabParamList } from './types'
+import { useUser } from '../context/UserContext'
+import { supabase } from '../lib/supabase'
 
 const Tab = createBottomTabNavigator<TabParamList>()
 
@@ -18,6 +21,26 @@ const TAB_ICONS: Record<keyof TabParamList, [focused: IconName, unfocused: IconN
 }
 
 export default function MainTabNavigator() {
+  const { profile } = useUser()
+  const myId = profile.supabaseId
+  const [unread, setUnread] = useState(0)
+
+  useEffect(() => {
+    if (!myId) return
+    const channel = supabase
+      .channel(`unread-${myId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>
+          if (row.receiver_id === myId) setUnread(n => n + 1)
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [myId])
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -41,7 +64,12 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen name="Discover" component={DiscoverScreen} />
       <Tab.Screen name="Connections" component={ConnectionsScreen} />
-      <Tab.Screen name="Messages" component={MessagesScreen} />
+      <Tab.Screen
+        name="Messages"
+        component={MessagesScreen}
+        options={{ tabBarBadge: unread > 0 ? unread : undefined }}
+        listeners={{ focus: () => setUnread(0) }}
+      />
       <Tab.Screen
         name="MyProfile"
         component={MyProfileScreen}
