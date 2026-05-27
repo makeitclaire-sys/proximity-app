@@ -11,11 +11,13 @@ import {
   type RoomMember,
 } from "../services/roomService"
 
+type CreateRoomOpts = { isDiscoverable?: boolean; latitude?: number | null; longitude?: number | null }
+
 type RoomContextType = {
   room: Room | null
   roomLoaded: boolean
   members: RoomMember[]
-  createRoom: (name: string) => Promise<void>
+  createRoom: (name: string, opts?: CreateRoomOpts) => Promise<Room>
   joinRoom: (code: string) => Promise<void>
   leaveRoom: () => Promise<void>
   refreshRoom: () => Promise<void>
@@ -60,11 +62,12 @@ export function RoomProvider({ children }: { children: ReactNode }) {
   useEffect(() => { refreshRoom() }, [refreshRoom])
   useEffect(() => { refreshMembers() }, [refreshMembers])
 
-  const createRoom = async (name: string) => {
+  const createRoom = async (name: string, opts: CreateRoomOpts = {}): Promise<Room> => {
     if (!myId) throw new Error("Not signed in")
-    const r = await svcCreate(name, myId)
+    const r = await svcCreate(name, myId, opts)
     setRoom(r)
     setMembers(await getRoomMembers(r.id))
+    return r
   }
 
   const joinRoom = async (code: string) => {

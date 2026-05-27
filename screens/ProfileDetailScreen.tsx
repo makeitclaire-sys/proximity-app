@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet, Image } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, Image, Alert } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
 import { mockPeople } from '../data/mockPeople'
 import { useInteractions } from '../context/InteractionContext'
 import { useUser } from '../context/UserContext'
-import { supabaseProfilesCache } from '../services/profileService'
+import { supabaseProfilesCache, reportUser } from '../services/profileService'
 import { createConnection, getConnectionWith, type Connection } from '../services/connectionService'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileDetail'>
@@ -30,7 +30,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
     ?? mockPeople.find(p => p.id === route.params.personId)
     ?? supabaseProfilesCache.get(route.params.personId)
   const { hideUser } = useInteractions()
-  const { profile: myProfile } = useUser()
+  const { profile: myProfile, blockUser } = useUser()
   const myId = myProfile.supabaseId
   const insets = useSafeAreaInsets()
 
@@ -74,6 +74,31 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
       setConnection(null)
     })
     navigation.navigate("Chat", { personId: person.id, name: person.name })
+  }
+
+  const handleBlock = () => {
+    Alert.alert(`Block ${person.name}?`, "They won't appear in your Discover.", [
+      { text: "Block", style: "destructive", onPress: async () => {
+        await blockUser(person.id)
+        navigation.goBack()
+      }},
+      { text: "Cancel", style: "cancel" },
+    ])
+  }
+
+  const handleReport = () => {
+    Alert.alert("Report", "What's the issue?", [
+      { text: "Spam", onPress: () => doReport("spam") },
+      { text: "Inappropriate content", onPress: () => doReport("inappropriate") },
+      { text: "Harassment", onPress: () => doReport("harassment") },
+      { text: "Cancel", style: "cancel" },
+    ])
+  }
+
+  const doReport = async (reason: string) => {
+    if (!myId) return
+    await reportUser(myId, person.id, reason)
+    Alert.alert("Reported", "Thanks for letting us know.")
   }
 
   return (
@@ -175,6 +200,19 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
         hitSlop={8}
       >
         <Text style={styles.backText}>← Back</Text>
+      </Pressable>
+
+      {/* ── More actions button ── */}
+      <Pressable
+        style={[styles.moreButton, { top: insets.top + 8 }]}
+        onPress={() => Alert.alert(person.name, undefined, [
+          { text: "Block", style: "destructive", onPress: handleBlock },
+          { text: "Report", onPress: handleReport },
+          { text: "Cancel", style: "cancel" },
+        ])}
+        hitSlop={8}
+      >
+        <Text style={styles.backText}>•••</Text>
       </Pressable>
 
       {/* ── Footer actions ── */}
@@ -313,6 +351,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  moreButton: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
   },
 
   // ── Sections ──

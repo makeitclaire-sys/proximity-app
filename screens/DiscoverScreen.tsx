@@ -70,6 +70,7 @@ export default function DiscoverScreen() {
 
   const visiblePeople = profiles.filter(p =>
     !hiddenUsers.includes(p.id) &&
+    !profile.blockedIds.includes(p.id) &&
     p.id !== profile.supabaseId &&
     (p.mode ?? "social") === activeMode &&
     p.isVisible !== false &&
@@ -144,9 +145,13 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={accentColor} style={styles.loader} />
             ) : visiblePeople.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>{activeMode === "social" ? "👀" : "💼"}</Text>
-                <Text style={styles.emptyTitle}>No {activeMode === "social" ? "people" : "professionals"} nearby right now.</Text>
-                <Text style={styles.emptySubtitle}>Check back soon.</Text>
+                <Text style={styles.emptyEmoji}>👋</Text>
+                <Text style={styles.emptyTitle}>You're the first one here.</Text>
+                <Text style={styles.emptySubtitle}>Share this code so others can join your room.</Text>
+                <View style={styles.roomCodeBox}>
+                  <Text style={styles.roomCodeLabel}>ROOM CODE</Text>
+                  <Text style={styles.roomCodeValue}>{room.code}</Text>
+                </View>
               </View>
             ) : (
               <View style={styles.list}>
@@ -313,6 +318,29 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: "#4A4458",
     textAlign: "center",
+  },
+  roomCodeBox: {
+    marginTop: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EEEBF2",
+    borderRadius: 18,
+    paddingVertical: 20,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    gap: 6,
+  },
+  roomCodeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#A8A3B8",
+    letterSpacing: 1.5,
+  },
+  roomCodeValue: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#12101C",
+    letterSpacing: 6,
   },
   noRoomState: {
     alignItems: "center",

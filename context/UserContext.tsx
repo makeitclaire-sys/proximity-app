@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
-import { getProfileById, updateProfile as saveProfileField } from "../services/profileService"
+import { getProfileById, updateProfile as saveProfileField, blockUser as svcBlockUser } from "../services/profileService"
 import { supabase } from "../lib/supabase"
 
 export type UserProfile = {
@@ -13,6 +13,7 @@ export type UserProfile = {
   mode: "social" | "professional"
   isVisible: boolean
   hasProfessionalMode: boolean
+  blockedIds: string[]
   supabaseId: string | null
   avatarUrl: string | null
 }
@@ -26,6 +27,7 @@ type UserContextType = {
   toggleMode: () => void
   toggleVisibility: () => void
   unlockProMode: () => Promise<void>
+  blockUser: (targetId: string) => Promise<void>
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -38,6 +40,7 @@ const DEFAULT_PROFILE: UserProfile = {
   mode: "social",
   isVisible: true,
   hasProfessionalMode: false,
+  blockedIds: [],
   supabaseId: null,
   avatarUrl: null,
 }
@@ -89,6 +92,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         mode: person.mode ?? prev.mode,
         isVisible: person.isVisible ?? prev.isVisible,
         hasProfessionalMode: person.hasProfessionalMode ?? false,
+        blockedIds: person.blockedIds ?? [],
         avatarUrl: person.avatarUrl ?? null,
       }))
     } catch (err) {
@@ -135,8 +139,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setProfile(prev => ({ ...prev, hasProfessionalMode: true }))
   }
 
+  const blockUser = async (targetId: string) => {
+    if (!profile.supabaseId) return
+    await svcBlockUser(profile.supabaseId, targetId)
+    setProfile(prev => ({ ...prev, blockedIds: [...prev.blockedIds, targetId] }))
+  }
+
   return (
-    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, setMode, toggleMode, toggleVisibility, unlockProMode }}>
+    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, setMode, toggleMode, toggleVisibility, unlockProMode, blockUser }}>
       {children}
     </UserContext.Provider>
   )

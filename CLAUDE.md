@@ -37,9 +37,9 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 | 1. Foundation fixes | 1–2 | ✅ Complete (compressed to Day 1) |
 | 2. Realtime chat + visibility | 3–4 | ✅ Complete (compressed) |
 | 3. Minimal rooms | 5–7 | ✅ Complete — schema, service layer, CreateRoom + JoinRoom screens, Discover gate, room-scoped filtering, leave-room flow |
-| 4. Block/report + polish | 8–9 | ⏳ Pending |
-| 5. TestFlight build #1 | 10–11 | ⏳ Pending |
-| 6. Iterate + TestFlight #2 | 12–14 | ⏳ Pending |
+| 4. Block/report + polish | 8–9 | ✅ Complete — block user, report user, blocked filter in Discover, room code shown after CreateRoom |
+| 5. TestFlight build #1 | 10–11 | ✅ Complete — group chat + Android APK shipped (build 969a3fed), logo SVG component |
+| 6. Iterate + TestFlight #2 | 12–14 | 🔧 In progress — discoverable rooms with coarse location |
 
 ## What's built end-to-end
 
@@ -108,6 +108,9 @@ Index: `(sender_id, receiver_id, created_at)`. In realtime publication.
 | `created_at` | timestamptz | |
 | `ends_at` | timestamptz | nullable |
 | `closed_at` | timestamptz | nullable |
+| `is_discoverable` | bool | default false — opt-in per room |
+| `latitude` | float8 | nullable — only set when discoverable |
+| `longitude` | float8 | nullable — only set when discoverable |
 
 ### `room_members`
 | Column | Type | Notes |
@@ -136,6 +139,7 @@ App.tsx                         — root, deep-link auth handler, providers
 index.ts                        — entry point
 app.json                        — Expo config, scheme: "proximity"
 lib/supabase.ts                 — Supabase client init
+lib/location.ts                 — getCurrentCoarseLocation(), haversineMeters()
 
 navigation/
   RootNavigator.tsx             — native stack
@@ -153,7 +157,7 @@ services/
   profileService.ts             — getProfiles, getProfileById, createProfile, updateProfile, uploadAvatar, getEmailByUsername
   connectionService.ts          — createConnection, getConnections, getConnectionWith, updateConnectionStatus
   messageService.ts             — sendMessage, getMessages, subscribeToConversation
-  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers
+  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers, setRoomDiscoverable, getNearbyDiscoverableRooms
 
 screens/
   Welcome, Signup, Login, LoginCode, EmailVerify, PasswordSetup    (auth flow)
@@ -216,4 +220,4 @@ At the end of every working session:
 
 ---
 
-*Last updated: end of Day 7. Phase 3 (Minimal rooms) complete. Phase 4 next: block/report + polish (Days 8–9).*
+*Last updated: Day 12. Phase 5 complete — Android APK shipped. Phase 6 in progress. Discoverable rooms with coarse location shipped: `expo-location` installed, `lib/location.ts` added, rooms schema extended with `is_discoverable/latitude/longitude`, `roomService.ts` updated, CreateRoomScreen has discoverable toggle, JoinRoomScreen shows nearby rooms. Next: rebuild APK (`eas build --platform android --profile preview`), two-device test discoverable rooms, then TestFlight.*

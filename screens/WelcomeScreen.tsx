@@ -1,7 +1,8 @@
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../navigation/RootNavigator'
+import { ProximityLogo } from '../components/ProximityLogo'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>
 
@@ -18,11 +19,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.centerContent}>
-          <Image
-            source={require('../assets/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <ProximityLogo size={120} />
 
           <Text style={styles.title}>
             Meet the people{'\n'}
@@ -79,11 +76,6 @@ const styles = StyleSheet.create({
   },
   centerContent: {
     gap: 20,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    alignSelf: 'center',
   },
   title: {
     fontSize: 44,

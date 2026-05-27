@@ -11,21 +11,37 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FAFAFB"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.makeitclaire.proximity",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Proximity needs access to your photos to set a profile picture.",
+        "NSCameraUsageDescription": "Proximity needs camera access to take a profile photo.",
+        "NSLocationWhenInUseUsageDescription": "proximity uses your location to show rooms nearby that have opted to be discoverable. private rooms always require a code."
+      }
     },
     "android": {
+      "package": "com.makeitclaire.proximity",
+      "versionCode": 1,
+      "permissions": ["ACCESS_COARSE_LOCATION"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FAFAFB"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3c878fa1-a0da-4a3f-bd6e-d64ac7aaa17e"
+      }
+    },
+    "owner": "proximity123"
   }
 }

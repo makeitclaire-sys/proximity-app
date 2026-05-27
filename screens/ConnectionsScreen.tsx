@@ -86,7 +86,7 @@ export default function ConnectionsScreen() {
   const modeConns = connections.filter(c => c.mode === activeMode)
 
   const receivedPending = modeConns.filter(
-    c => c.receiverId === myId && c.status === "pending"
+    c => c.receiverId === myId && c.status === "pending" && !myProfile.blockedIds.includes(getOtherId(c))
   )
   const sentHi = modeConns.filter(
     c => c.senderId === myId && c.status === "pending" && c.type === "hi"
@@ -94,7 +94,9 @@ export default function ConnectionsScreen() {
   const sentChat = modeConns.filter(
     c => c.senderId === myId && c.status === "pending" && c.type === "chat"
   )
-  const accepted = modeConns.filter(c => c.status === "accepted")
+  const accepted = modeConns.filter(
+    c => c.status === "accepted" && !myProfile.blockedIds.includes(getOtherId(c))
+  )
 
   const isEmpty =
     !loading &&

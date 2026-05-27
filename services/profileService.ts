@@ -12,6 +12,7 @@ type ProfileRow = {
   mode: "social" | "professional"
   is_visible: boolean
   has_pro_mode: boolean
+  blocked_user_ids: string[] | null
   interests: string[]
   talk_topics: string[]
   avoid_topics: string[]
@@ -47,6 +48,7 @@ function rowToPerson(row: ProfileRow): Person {
     mode: row.mode,
     isVisible: row.is_visible,
     hasProfessionalMode: row.has_pro_mode ?? false,
+    blockedIds: row.blocked_user_ids ?? [],
     interests: row.interests ?? [],
     talkTopics: row.talk_topics ?? [],
     avoidTopics: row.avoid_topics ?? [],
@@ -140,20 +142,59 @@ export async function updateProfile(id: string, updates: ProfileUpdates): Promis
   supabaseProfilesCache.delete(id)
 }
 
-export async function uploadAvatar(id: string, localUri: string): Promise<string> {
-  // Path is relative to the bucket root — bucket name is NOT repeated here
-  const path = `${id}.jpg`
-  console.log("[uploadAvatar] bucket: avatars, path:", path, "uri:", localUri)
+export async function blockUser(myId: string, targetId: string): Promise<void> {
+  const { data, error: readError } = await supabase
+    .from("profiles")
+    .select("blocked_user_ids")
+    .eq("id", myId)
+    .single()
 
-  const response = await fetch(localUri)
-  const arrayBuffer = await response.arrayBuffer()
+  if (readError) throw readError
+
+  const current = (data as { blocked_user_ids: string[] | null }).blocked_user_ids ?? []
+  if (current.includes(targetId)) return
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ blocked_user_ids: [...current, targetId] })
+    .eq("id", myId)
+
+  if (error) throw error
+  supabaseProfilesCache.delete(myId)
+}
+
+export async function reportUser(
+  reporterId: string,
+  reportedId: string,
+  reason: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("reports")
+    .insert({ reporter_id: reporterId, reported_id: reportedId, reason })
+  if (error) throw error
+}
+
+export async function uploadAvatar(id: string, localUri: string): Promise<string> {
+  const path = `${id}.jpg`
+  console.log("[uploadAvatar] path:", path, "uri:", localUri)
+
+  // XHR with arraybuffer is the most reliable way to read local file:// URIs in React Native.
+  // fetch().blob() and fetch().arrayBuffer() both have issues with local URIs in some Expo builds.
+  const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.responseType = "arraybuffer"
+    xhr.open("GET", localUri)
+    xhr.onload = () => resolve(xhr.response as ArrayBuffer)
+    xhr.onerror = () => reject(new Error("XHR read failed"))
+    xhr.send()
+  })
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
     .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: true })
 
   if (uploadError) {
-    console.error("[uploadAvatar] UPLOAD ERROR:", uploadError.message, uploadError)
+    console.error("[uploadAvatar] status:", (uploadError as any).status, "message:", uploadError.message, uploadError)
     throw uploadError
   }
 
