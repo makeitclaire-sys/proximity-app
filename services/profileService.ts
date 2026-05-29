@@ -175,7 +175,7 @@ export async function reportUser(
 }
 
 export async function uploadAvatar(id: string, localUri: string): Promise<string> {
-  const path = `${id}.jpg`
+  const path = `${id}/avatar.jpg`
   console.log("[uploadAvatar] path:", path, "uri:", localUri)
 
   // XHR with arraybuffer is the most reliable way to read local file:// URIs in React Native.
