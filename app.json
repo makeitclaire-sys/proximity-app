@@ -19,14 +19,12 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Proximity needs access to your photos to set a profile picture.",
-        "NSCameraUsageDescription": "Proximity needs camera access to take a profile photo.",
-        "NSLocationWhenInUseUsageDescription": "proximity uses your location to show rooms nearby that have opted to be discoverable. private rooms always require a code."
+        "NSCameraUsageDescription": "Proximity needs camera access to take a profile photo."
       }
     },
     "android": {
       "package": "com.makeitclaire.proximity",
       "versionCode": 2,
-      "permissions": ["ACCESS_COARSE_LOCATION"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAFAFB"

@@ -1,19 +1,10 @@
-import * as Location from "expo-location"
-
 export type Coords = { lat: number; lng: number }
 
+// expo-location removed pending Android 12 compatibility investigation.
+// getCurrentCoarseLocation returns null — discoverable rooms will fall back
+// to code-only mode (no nearby section shown in JoinRoom).
 export async function getCurrentCoarseLocation(): Promise<Coords | null> {
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync()
-    if (status !== "granted") return null
-
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Low,
-    })
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
-  } catch {
-    return null
-  }
+  return null
 }
 
 export function haversineMeters(a: Coords, b: Coords): number {
