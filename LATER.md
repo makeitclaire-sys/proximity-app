@@ -80,6 +80,23 @@ CREATE POLICY "send to accepted contacts only" ON messages FOR INSERT
 
 ---
 
+## Avatar bucket DELETE policy too permissive
+
+Current policy "Allow avatar deletes" lets any authenticated user delete any avatar in the bucket. Before App Store launch:
+
+```sql
+drop policy if exists "Allow avatar deletes" on storage.objects;
+create policy "delete own avatar"
+  on storage.objects for delete
+  using (
+    bucket_id = 'avatars'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+```
+
+---
+
 ## Social mode friction with required rooms — validate during beta
 
 **Issue:** Current MVP requires every Discover view to be scoped to a room you've joined. Professional mode benefits clearly (events, dinners, conferences are naturally room-shaped). Social mode is less obvious — a person at a coffee shop has no host to set up a room.

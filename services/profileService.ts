@@ -1,5 +1,8 @@
 import { supabase } from "../lib/supabase"
 import type { Person } from "../data/mockPeople"
+import * as FileSystem from "expo-file-system"
+import { decode } from "base64-arraybuffer"
+import * as ImageManipulator from "expo-image-manipulator"
 
 // Raw shape returned from the profiles table
 type ProfileRow = {
@@ -176,29 +179,53 @@ export async function reportUser(
 
 export async function uploadAvatar(id: string, localUri: string): Promise<string> {
   const path = `${id}/avatar.jpg`
-  console.log("[uploadAvatar] path:", path, "uri:", localUri)
+  console.log("[uploadAvatar] start — id:", id, "uri:", localUri)
 
-  // XHR with arraybuffer is the most reliable way to read local file:// URIs in React Native.
-  // fetch().blob() and fetch().arrayBuffer() both have issues with local URIs in some Expo builds.
-  const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.responseType = "arraybuffer"
-    xhr.open("GET", localUri)
-    xhr.onload = () => resolve(xhr.response as ArrayBuffer)
-    xhr.onerror = () => reject(new Error("XHR read failed"))
-    xhr.send()
-  })
+  // Resize + compress before upload (also converts HEIC → JPEG)
+  let manipulated
+  try {
+    manipulated = await ImageManipulator.manipulateAsync(
+      localUri,
+      [{ resize: { width: 1024 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    )
+    console.log("[uploadAvatar] manipulated:", manipulated.uri)
+  } catch (e: any) {
+    console.error("[uploadAvatar] manipulate failed:", e?.message ?? e)
+    throw new Error(`Could not process image: ${e?.message ?? "unknown"}`)
+  }
+
+  // Read as base64 — works with file://, content://, ph:// on all platforms
+  let base64: string
+  try {
+    base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+    console.log("[uploadAvatar] base64 length:", base64.length)
+  } catch (e: any) {
+    console.error("[uploadAvatar] file read failed:", e?.message ?? e)
+    throw new Error(`Could not read image file: ${e?.message ?? "unknown"}`)
+  }
+
+  if (!base64 || base64.length < 100) {
+    throw new Error("Image file was empty or too small.")
+  }
+
+  const arrayBuffer = decode(base64)
+  console.log("[uploadAvatar] arrayBuffer bytes:", arrayBuffer.byteLength)
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
     .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: true })
 
   if (uploadError) {
-    console.error("[uploadAvatar] status:", (uploadError as any).status, "message:", uploadError.message, uploadError)
-    throw uploadError
+    console.error("[uploadAvatar] supabase error:", uploadError)
+    throw new Error(`Upload failed: ${uploadError.message}`)
   }
 
+  // Cache-bust the URL so React Native doesn't show the stale image after upsert
   const { data } = supabase.storage.from("avatars").getPublicUrl(path)
-  console.log("[uploadAvatar] public URL:", data.publicUrl)
-  return data.publicUrl
+  const cacheBustedUrl = `${data.publicUrl}?t=${Date.now()}`
+  console.log("[uploadAvatar] public URL:", cacheBustedUrl)
+  return cacheBustedUrl
 }

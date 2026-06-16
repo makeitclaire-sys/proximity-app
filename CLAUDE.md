@@ -191,6 +191,13 @@ data/
 4. Add `localStorage` or browser storage APIs. Not supported in React Native.
 5. Skip the two-device test after any messaging or realtime change.
 6. Hardcode user IDs anywhere. Use the auth session.
+7. Use XHR + arraybuffer to read local image URIs in React Native — it breaks on Android `content://` URIs. Use `expo-file-system` `readAsStringAsync` with Base64 encoding, then `base64-arraybuffer` `decode()` to get an ArrayBuffer for Supabase.
+
+## Storage (avatars bucket)
+
+Bucket is public. RLS policies are intentionally permissive for beta:
+- INSERT/UPDATE: users can only write to their own folder (`{uid}/avatar.jpg`) — enforced via `(storage.foldername(name))[1] = auth.uid()::text`.
+- DELETE: current "Allow avatar deletes" policy lets any authed user delete any avatar — too permissive. See LATER.md to tighten before App Store launch.
 
 ## Deferred items (LATER.md)
 
@@ -220,4 +227,4 @@ At the end of every working session:
 
 ---
 
-*Last updated: Day 12. Phase 5 complete — Android APK shipped. Phase 6 in progress. Discoverable rooms with coarse location shipped: `expo-location` installed, `lib/location.ts` added, rooms schema extended with `is_discoverable/latitude/longitude`, `roomService.ts` updated, CreateRoomScreen has discoverable toggle, JoinRoomScreen shows nearby rooms. Next: rebuild APK (`eas build --platform android --profile preview`), two-device test discoverable rooms, then TestFlight.*
+*Last updated: Day 12 continued. Photo upload fixed: replaced XHR arraybuffer with expo-file-system + base64-arraybuffer + expo-image-manipulator (fixes Android content:// URIs). expo-location removed to fix "App not installed" on Android 12 — location.ts stubbed, discoverable rooms fall back to code-only. Password reset deep link fixed (hostname detection + hash token fallback). Next: rebuild APK, verify photo upload + password reset on device, two-device test, then TestFlight.*

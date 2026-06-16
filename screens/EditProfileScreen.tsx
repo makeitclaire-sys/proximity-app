@@ -79,10 +79,12 @@ export default function EditProfileScreen({ navigation }: Props) {
       setAvatarUrl(publicUrl)
       updateProfile({ avatarUrl: publicUrl })
       await saveToSupabase(profile.supabaseId, { avatar_url: publicUrl })
+      await refreshProfile()
+      Alert.alert("photo updated", "your new photo is live.")
     } catch (err) {
       console.error("UPLOAD ERROR:", err)
       const msg = err instanceof Error ? err.message : JSON.stringify(err)
-      Alert.alert("Upload failed", msg)
+      Alert.alert("upload failed", msg)
     } finally {
       setUploading(false)
     }
