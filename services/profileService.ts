@@ -311,7 +311,7 @@ export async function uploadAvatar(id: string, localUri: string): Promise<string
   let base64: string
   try {
     base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: "base64",
     })
     console.log("[uploadAvatar] base64 length:", base64.length)
   } catch (e: any) {
