@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabase"
 import type { Person } from "../data/mockPeople"
-import * as FileSystem from "expo-file-system"
+import * as FileSystem from "expo-file-system/legacy"
 import { decode } from "base64-arraybuffer"
 import * as ImageManipulator from "expo-image-manipulator"
 import { haversineMeters, type Coords } from "../lib/location"
