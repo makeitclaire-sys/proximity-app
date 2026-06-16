@@ -2,14 +2,15 @@ import { useState, useEffect } from "react"
 import {
   View, Text, Pressable, TextInput, StyleSheet,
   KeyboardAvoidingView, TouchableWithoutFeedback,
-  Keyboard, ActivityIndicator, Alert, ScrollView,
+  Keyboard, ActivityIndicator, Alert, ScrollView, Modal,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
 import { useRoom } from "../context/RoomContext"
 import { getCurrentCoarseLocation } from "../lib/location"
-import { getNearbyDiscoverableRooms, type NearbyRoom } from "../services/roomService"
+import { getNearbyOpenRooms, type NearbyRoom } from "../services/roomService"
+import { CameraView, useCameraPermissions } from "expo-camera"
 
 type Props = NativeStackScreenProps<RootStackParamList, "JoinRoom">
 
@@ -20,6 +21,9 @@ export default function JoinRoomScreen({ navigation }: Props) {
   const [nearbyRooms, setNearbyRooms] = useState<NearbyRoom[]>([])
   const [nearbyLoading, setNearbyLoading] = useState(true)
   const [joiningId, setJoiningId] = useState<string | null>(null)
+  const [scannerVisible, setScannerVisible] = useState(false)
+  const [scanned, setScanned] = useState(false)
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions()
 
   useEffect(() => {
     let cancelled = false
@@ -27,10 +31,10 @@ export default function JoinRoomScreen({ navigation }: Props) {
       const coords = await getCurrentCoarseLocation()
       if (cancelled || !coords) { setNearbyLoading(false); return }
       try {
-        const rooms = await getNearbyDiscoverableRooms(coords.lat, coords.lng)
+        const rooms = await getNearbyOpenRooms(coords.lat, coords.lng)
         if (!cancelled) setNearbyRooms(rooms)
       } catch {
-        // silently hide the section on error
+        // silently hide section on error
       } finally {
         if (!cancelled) setNearbyLoading(false)
       }
@@ -43,15 +47,15 @@ export default function JoinRoomScreen({ navigation }: Props) {
     setCode(text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))
   }
 
-  const handleJoin = async () => {
-    if (code.length !== 6 || loading) return
+  const handleJoin = async (codeToJoin = code) => {
+    if (codeToJoin.length !== 6 || loading) return
     Keyboard.dismiss()
     setLoading(true)
     try {
-      await joinRoom(code)
+      await joinRoom(codeToJoin)
       navigation.goBack()
     } catch (err) {
-      Alert.alert("Couldn't join room", err instanceof Error ? err.message : "Check the code and try again.")
+      Alert.alert("couldn't join room", err instanceof Error ? err.message : "check the code and try again.")
     } finally {
       setLoading(false)
     }
@@ -64,9 +68,34 @@ export default function JoinRoomScreen({ navigation }: Props) {
       await joinRoom(room.code)
       navigation.goBack()
     } catch (err) {
-      Alert.alert("Couldn't join room", err instanceof Error ? err.message : "Please try again.")
+      Alert.alert("couldn't join room", err instanceof Error ? err.message : "please try again.")
     } finally {
       setJoiningId(null)
+    }
+  }
+
+  const handleOpenScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission()
+      if (!result.granted) {
+        Alert.alert("camera needed", "allow camera access to scan a QR code.")
+        return
+      }
+    }
+    setScanned(false)
+    setScannerVisible(true)
+  }
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (scanned) return
+    setScanned(true)
+    setScannerVisible(false)
+    // proximity://join/ABCDEF
+    const match = data.match(/proximity:\/\/join\/([A-Z0-9]{6})/i)
+    if (match) {
+      handleJoin(match[1].toUpperCase())
+    } else {
+      Alert.alert("invalid QR", "that doesn't look like a Proximity room code.")
     }
   }
 
@@ -87,7 +116,7 @@ export default function JoinRoomScreen({ navigation }: Props) {
 
             {showNearby && (
               <View style={styles.nearbySection}>
-                <Text style={styles.nearbyHeading}>rooms nearby</Text>
+                <Text style={styles.nearbyHeading}>open rooms nearby</Text>
                 {nearbyRooms.map(room => (
                   <Pressable
                     key={room.id}
@@ -98,7 +127,7 @@ export default function JoinRoomScreen({ navigation }: Props) {
                     <View style={styles.nearbyCardInfo}>
                       <Text style={styles.nearbyRoomName}>{room.name}</Text>
                       <Text style={styles.nearbyMeta}>
-                        {room.memberCount} {room.memberCount === 1 ? "person" : "here"} · {room.distanceMeters}m away
+                        {room.memberCount} {room.memberCount === 1 ? "person" : "people"} here · {room.distanceMeters}m away
                       </Text>
                     </View>
                     {joiningId === room.id
@@ -113,22 +142,27 @@ export default function JoinRoomScreen({ navigation }: Props) {
             <View style={styles.codeSection}>
               <Text style={styles.title}>Join a room</Text>
               <Text style={styles.subtitle}>
-                Enter the 6-character code from the person who created the room.
+                Enter the 6-character code from the host, or scan the QR.
               </Text>
 
-              <TextInput
-                style={styles.codeInput}
-                value={code}
-                onChangeText={handleCode}
-                placeholder="XXXXXX"
-                placeholderTextColor="#C4BFD4"
-                autoCapitalize="characters"
-                autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={handleJoin}
-                maxLength={6}
-                editable={!loading}
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={[styles.codeInput, { flex: 1 }]}
+                  value={code}
+                  onChangeText={handleCode}
+                  placeholder="XXXXXX"
+                  placeholderTextColor="#C4BFD4"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={() => handleJoin()}
+                  maxLength={6}
+                  editable={!loading}
+                />
+                <Pressable style={styles.scanButton} onPress={handleOpenScanner}>
+                  <Text style={styles.scanButtonText}>scan QR</Text>
+                </Pressable>
+              </View>
 
               {code.length > 0 && code.length < 6 && (
                 <Text style={styles.hint}>{6 - code.length} characters remaining</Text>
@@ -136,7 +170,7 @@ export default function JoinRoomScreen({ navigation }: Props) {
 
               <Pressable
                 style={[styles.primaryButton, (code.length !== 6 || loading) && styles.disabled]}
-                onPress={handleJoin}
+                onPress={() => handleJoin()}
                 disabled={code.length !== 6 || loading}
               >
                 {loading
@@ -148,6 +182,23 @@ export default function JoinRoomScreen({ navigation }: Props) {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* QR scanner modal */}
+      <Modal visible={scannerVisible} presentationStyle="fullScreen" animationType="slide">
+        <SafeAreaView style={styles.scannerContainer} edges={["top", "bottom"]}>
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarcodeScanned={!scanned ? handleBarcodeScan : undefined}
+          />
+          <View style={styles.scannerOverlay}>
+            <Text style={styles.scannerLabel}>point at the room QR code</Text>
+          </View>
+          <Pressable style={styles.scannerCancel} onPress={() => setScannerVisible(false)}>
+            <Text style={styles.scannerCancelText}>cancel</Text>
+          </Pressable>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -199,6 +250,12 @@ const styles = StyleSheet.create({
     color: "#4A4458",
     maxWidth: 300,
   },
+  inputRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
   codeInput: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -211,7 +268,19 @@ const styles = StyleSheet.create({
     color: "#12101C",
     letterSpacing: 6,
     textAlign: "center",
-    marginTop: 8,
+  },
+  scanButton: {
+    backgroundColor: "#F0EEF5",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#12101C",
   },
   hint: {
     fontSize: 12,
@@ -227,4 +296,39 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.45 },
   primaryButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
+  // Scanner
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  scannerOverlay: {
+    position: "absolute",
+    bottom: 120,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  scannerLabel: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "500",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  scannerCancel: {
+    position: "absolute",
+    bottom: 48,
+    alignSelf: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 999,
+  },
+  scannerCancelText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
 })

@@ -20,6 +20,7 @@ import ChatScreen from '../screens/ChatScreen'
 import PaywallScreen from '../screens/PaywallScreen'
 import CreateRoomScreen from '../screens/CreateRoomScreen'
 import JoinRoomScreen from '../screens/JoinRoomScreen'
+import RoomCodeScreen from '../screens/RoomCodeScreen'
 import MainTabNavigator from './MainTabNavigator'
 import type { RootStackParamList } from './types'
 
@@ -58,6 +59,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Paywall"        component={PaywallScreen} />
         <Stack.Screen name="CreateRoom"     component={CreateRoomScreen} />
         <Stack.Screen name="JoinRoom"       component={JoinRoomScreen} />
+        <Stack.Screen name="RoomCode"       component={RoomCodeScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   )

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import {
-  View, Text, Pressable, TextInput, StyleSheet, Switch,
+  View, Text, Pressable, TextInput, StyleSheet,
   KeyboardAvoidingView, TouchableWithoutFeedback,
   Keyboard, ActivityIndicator, Alert,
 } from "react-native"
@@ -16,15 +16,14 @@ export default function CreateRoomScreen({ navigation }: Props) {
   const { createRoom } = useRoom()
   const [name, setName] = useState("")
   const [loading, setLoading] = useState(false)
-  const [roomCode, setRoomCode] = useState<string | null>(null)
-  const [discoverable, setDiscoverable] = useState(false)
+  const [accessMode, setAccessMode] = useState<"private" | "open">("private")
   const [locationDenied, setLocationDenied] = useState(false)
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null)
 
-  const handleDiscoverableToggle = async (value: boolean) => {
+  const handleModeSelect = async (mode: "private" | "open") => {
     setLocationDenied(false)
-    if (!value) {
-      setDiscoverable(false)
+    if (mode === "private") {
+      setAccessMode("private")
       setPendingCoords(null)
       return
     }
@@ -33,7 +32,7 @@ export default function CreateRoomScreen({ navigation }: Props) {
       setLocationDenied(true)
       return
     }
-    setDiscoverable(true)
+    setAccessMode("open")
     setPendingCoords(coords)
   }
 
@@ -43,44 +42,20 @@ export default function CreateRoomScreen({ navigation }: Props) {
     setLoading(true)
     try {
       const room = await createRoom(name.trim(), {
-        isDiscoverable: discoverable,
+        accessMode,
         latitude: pendingCoords?.lat ?? null,
         longitude: pendingCoords?.lng ?? null,
       })
-      setRoomCode(room.code)
+      navigation.replace("RoomCode", {
+        roomCode: room.code,
+        roomName: room.name,
+        accessMode: room.accessMode,
+      })
     } catch (err) {
-      Alert.alert("Couldn't create room", err instanceof Error ? err.message : "Please try again.")
+      Alert.alert("couldn't create room", err instanceof Error ? err.message : "please try again.")
     } finally {
       setLoading(false)
     }
-  }
-
-  if (roomCode) {
-    return (
-      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <View style={styles.content}>
-          <View style={styles.body}>
-            <Text style={styles.title}>Room created</Text>
-            <Text style={styles.subtitle}>
-              Share this code so others can join your room.
-            </Text>
-            <View style={styles.codeBox}>
-              <Text style={styles.codeText}>{roomCode}</Text>
-            </View>
-            {discoverable && (
-              <Text style={styles.discoverableNote}>
-                this room is discoverable — people within ~200m can see it.
-              </Text>
-            )}
-          </View>
-          <View style={styles.footer}>
-            <Pressable style={styles.primaryButton} onPress={() => navigation.goBack()}>
-              <Text style={styles.primaryButtonText}>Go to room</Text>
-            </Pressable>
-          </View>
-        </View>
-      </SafeAreaView>
-    )
   }
 
   return (
@@ -113,26 +88,37 @@ export default function CreateRoomScreen({ navigation }: Props) {
                 editable={!loading}
               />
 
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleLabel}>
-                  <Text style={styles.toggleTitle}>make this room discoverable</Text>
-                  <Text style={styles.toggleDescription}>
-                    people within about 200 meters can see and join. private rooms still need a code.
+              {/* Access mode segmented control */}
+              <View style={styles.segmented}>
+                <Pressable
+                  style={[styles.segment, accessMode === "private" && styles.segmentActive]}
+                  onPress={() => handleModeSelect("private")}
+                >
+                  <Text style={[styles.segmentText, accessMode === "private" && styles.segmentTextActive]}>
+                    private
                   </Text>
-                  {locationDenied && (
-                    <Text style={styles.locationDenied}>
-                      we need location permission to make this room discoverable
-                    </Text>
-                  )}
-                </View>
-                <Switch
-                  value={discoverable}
-                  onValueChange={handleDiscoverableToggle}
-                  trackColor={{ false: "#EEEBF2", true: "#12101C" }}
-                  thumbColor="#FFFFFF"
-                  disabled={loading}
-                />
+                </Pressable>
+                <Pressable
+                  style={[styles.segment, accessMode === "open" && styles.segmentActive]}
+                  onPress={() => handleModeSelect("open")}
+                >
+                  <Text style={[styles.segmentText, accessMode === "open" && styles.segmentTextActive]}>
+                    open
+                  </Text>
+                </Pressable>
               </View>
+
+              <Text style={styles.modeExplainer}>
+                {accessMode === "private"
+                  ? "only people with the code can join."
+                  : "people within 200m can see this room and join with one tap."}
+              </Text>
+
+              {locationDenied && (
+                <Text style={styles.locationDenied}>
+                  we need location permission to make this room open
+                </Text>
+              )}
             </View>
 
             <View style={styles.footer}>
@@ -193,26 +179,40 @@ const styles = StyleSheet.create({
     color: "#12101C",
     marginTop: 8,
   },
-  toggleRow: {
+  segmented: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EEEBF2",
-    borderRadius: 18,
-    padding: 18,
-    gap: 12,
+    backgroundColor: "#F0EEF5",
+    borderRadius: 999,
+    padding: 4,
+    gap: 4,
   },
-  toggleLabel: { flex: 1, gap: 4 },
-  toggleTitle: { fontSize: 15, fontWeight: "600", color: "#12101C" },
-  toggleDescription: { fontSize: 13, lineHeight: 18, color: "#4A4458" },
-  locationDenied: { fontSize: 12, color: "#FF2D87", marginTop: 4 },
-  discoverableNote: {
-    fontSize: 13,
+  segment: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  segmentActive: {
+    backgroundColor: "#12101C",
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#4A4458",
-    textAlign: "center",
-    marginTop: 8,
+  },
+  segmentTextActive: {
+    color: "#FFFFFF",
+  },
+  modeExplainer: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#4A4458",
+    marginTop: -4,
+  },
+  locationDenied: {
+    fontSize: 12,
+    color: "#FF2D87",
+    marginTop: -4,
   },
   footer: { gap: 12 },
   primaryButton: {
@@ -223,19 +223,4 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.45 },
   primaryButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
-  codeBox: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EEEBF2",
-    borderRadius: 18,
-    paddingVertical: 24,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  codeText: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#12101C",
-    letterSpacing: 8,
-  },
 })

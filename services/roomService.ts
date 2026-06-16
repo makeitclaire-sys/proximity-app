@@ -10,6 +10,7 @@ export type Room = {
   endsAt: string | null
   closedAt: string | null
   isDiscoverable: boolean
+  accessMode: "private" | "open"
   latitude: number | null
   longitude: number | null
 }
@@ -39,6 +40,7 @@ type RoomRow = {
   ends_at: string | null
   closed_at: string | null
   is_discoverable: boolean
+  access_mode: string | null
   latitude: number | null
   longitude: number | null
 }
@@ -52,6 +54,7 @@ type RoomMemberRow = {
 }
 
 function rowToRoom(row: RoomRow): Room {
+  const accessMode = (row.access_mode === "open" ? "open" : "private") as "private" | "open"
   return {
     id: row.id,
     name: row.name,
@@ -61,6 +64,7 @@ function rowToRoom(row: RoomRow): Room {
     endsAt: row.ends_at,
     closedAt: row.closed_at,
     isDiscoverable: row.is_discoverable ?? false,
+    accessMode,
     latitude: row.latitude ?? null,
     longitude: row.longitude ?? null,
   }
@@ -83,7 +87,7 @@ function generateCode(): string {
 }
 
 type CreateRoomOptions = {
-  isDiscoverable?: boolean
+  accessMode?: "private" | "open"
   latitude?: number | null
   longitude?: number | null
 }
@@ -94,7 +98,8 @@ export async function createRoom(
   options: CreateRoomOptions = {}
 ): Promise<Room> {
   const code = generateCode()
-  const { isDiscoverable = false, latitude = null, longitude = null } = options
+  const { accessMode = "private", latitude = null, longitude = null } = options
+  const isOpen = accessMode === "open"
 
   const { data: roomData, error: roomError } = await supabase
     .from("rooms")
@@ -102,9 +107,10 @@ export async function createRoom(
       name: name.trim(),
       code,
       host_id: hostId,
-      is_discoverable: isDiscoverable,
-      latitude: isDiscoverable ? latitude : null,
-      longitude: isDiscoverable ? longitude : null,
+      access_mode: accessMode,
+      is_discoverable: isOpen,
+      latitude: isOpen ? latitude : null,
+      longitude: isOpen ? longitude : null,
     })
     .select()
     .single()
@@ -147,6 +153,55 @@ export async function getNearbyDiscoverableRooms(
     .from("rooms")
     .select("id, name, code, latitude, longitude")
     .eq("is_discoverable", true)
+    .is("closed_at", null)
+    .not("latitude", "is", null)
+    .not("longitude", "is", null)
+
+  if (error) throw error
+  if (!data || data.length === 0) return []
+
+  const userCoords: Coords = { lat: userLat, lng: userLng }
+  const candidates = (data as { id: string; name: string; code: string; latitude: number; longitude: number }[])
+    .map(r => ({
+      id: r.id,
+      name: r.name,
+      code: r.code,
+      distanceMeters: haversineMeters(userCoords, { lat: r.latitude, lng: r.longitude }),
+    }))
+    .filter(r => r.distanceMeters <= radiusM)
+    .sort((a, b) => a.distanceMeters - b.distanceMeters)
+
+  if (candidates.length === 0) return []
+
+  const memberCounts = await Promise.all(
+    candidates.map(async r => {
+      const { count } = await supabase
+        .from("room_members")
+        .select("id", { count: "exact", head: true })
+        .eq("room_id", r.id)
+        .is("left_at", null)
+      return count ?? 0
+    })
+  )
+
+  return candidates.map((r, i) => ({
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    memberCount: memberCounts[i],
+    distanceMeters: Math.round(r.distanceMeters),
+  }))
+}
+
+export async function getNearbyOpenRooms(
+  userLat: number,
+  userLng: number,
+  radiusM = 200
+): Promise<NearbyRoom[]> {
+  const { data, error } = await supabase
+    .from("rooms")
+    .select("id, name, code, latitude, longitude")
+    .eq("access_mode", "open")
     .is("closed_at", null)
     .not("latitude", "is", null)
     .not("longitude", "is", null)

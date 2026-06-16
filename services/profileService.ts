@@ -3,6 +3,7 @@ import type { Person } from "../data/mockPeople"
 import * as FileSystem from "expo-file-system"
 import { decode } from "base64-arraybuffer"
 import * as ImageManipulator from "expo-image-manipulator"
+import { haversineMeters, type Coords } from "../lib/location"
 
 // Raw shape returned from the profiles table
 type ProfileRow = {
@@ -21,6 +22,12 @@ type ProfileRow = {
   avoid_topics: string[]
   conversation_starters: string[]
   avatar_url: string | null
+  // availability
+  is_available: boolean | null
+  available_until: string | null
+  last_known_latitude: number | null
+  last_known_longitude: number | null
+  last_location_at: string | null
 }
 
 type ProfileUpdates = {
@@ -36,6 +43,11 @@ type ProfileUpdates = {
   avoid_topics?: string[]
   conversation_starters?: string[]
   avatar_url?: string | null
+  is_available?: boolean
+  available_until?: string | null
+  last_known_latitude?: number | null
+  last_known_longitude?: number | null
+  last_location_at?: string | null
 }
 
 // Module-level cache so ProfileDetailScreen can look up Supabase profiles
@@ -57,6 +69,8 @@ function rowToPerson(row: ProfileRow): Person {
     avoidTopics: row.avoid_topics ?? [],
     starters: row.conversation_starters?.length ? row.conversation_starters : undefined,
     avatarUrl: row.avatar_url ?? undefined,
+    isAvailable: row.is_available ?? false,
+    availableUntil: row.available_until ?? null,
   }
   supabaseProfilesCache.set(person.id, person)
   return person
@@ -175,6 +189,104 @@ export async function reportUser(
     .from("reports")
     .insert({ reporter_id: reporterId, reported_id: reportedId, reason })
   if (error) throw error
+}
+
+export async function setAvailability(
+  userId: string,
+  isAvailable: boolean,
+  lat?: number,
+  lng?: number
+): Promise<void> {
+  if (isAvailable && (lat == null || lng == null)) {
+    throw new Error("Location is required to enable availability.")
+  }
+  const now = new Date()
+  const availableUntil = isAvailable
+    ? new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString()
+    : null
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      is_available: isAvailable,
+      available_until: availableUntil,
+      last_known_latitude: isAvailable ? (lat ?? null) : null,
+      last_known_longitude: isAvailable ? (lng ?? null) : null,
+      last_location_at: isAvailable ? now.toISOString() : null,
+    })
+    .eq("id", userId)
+
+  if (error) throw new Error(error.message)
+  supabaseProfilesCache.delete(userId)
+}
+
+export async function extendAvailability(userId: string): Promise<string> {
+  const newUntil = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+  const { error } = await supabase
+    .from("profiles")
+    .update({ available_until: newUntil })
+    .eq("id", userId)
+  if (error) throw new Error(error.message)
+  supabaseProfilesCache.delete(userId)
+  return newUntil
+}
+
+export async function updateLocationPing(
+  userId: string,
+  lat: number,
+  lng: number
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      last_known_latitude: lat,
+      last_known_longitude: lng,
+      last_location_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .eq("is_available", true)
+  if (error) throw new Error(error.message)
+}
+
+export async function getNearbyAvailablePeople(
+  currentUserId: string,
+  currentBlockedIds: string[],
+  currentLat: number,
+  currentLng: number,
+  mode: "social" | "professional",
+  radiusM = 200
+): Promise<Person[]> {
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("is_available", true)
+    .eq("is_visible", true)
+    .eq("mode", mode)
+    .gt("available_until", now)
+    .not("last_known_latitude", "is", null)
+    .not("last_known_longitude", "is", null)
+    .gt("last_location_at", thirtyMinutesAgo)
+    .neq("id", currentUserId)
+
+  if (error) throw error
+  if (!data || data.length === 0) return []
+
+  const userCoords: Coords = { lat: currentLat, lng: currentLng }
+
+  return (data as ProfileRow[])
+    .filter(row => {
+      const theirBlockList = row.blocked_user_ids ?? []
+      return !currentBlockedIds.includes(row.id) && !theirBlockList.includes(currentUserId)
+    })
+    .map(row => ({
+      ...rowToPerson(row),
+      distanceMeters: Math.round(haversineMeters(userCoords, { lat: row.last_known_latitude!, lng: row.last_known_longitude! })),
+    }))
+    .filter(p => (p.distanceMeters ?? Infinity) <= radiusM)
+    .sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0))
 }
 
 export async function uploadAvatar(id: string, localUri: string): Promise<string> {

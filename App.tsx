@@ -1,4 +1,5 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
+import { AppState } from "react-native"
 import * as Linking from "expo-linking"
 import RootNavigator from "./navigation/RootNavigator"
 import { InteractionProvider } from "./context/InteractionContext"
@@ -7,6 +8,9 @@ import { SignupProvider } from "./context/SignupContext"
 import { RoomProvider } from "./context/RoomContext"
 import { supabase } from "./lib/supabase"
 import { navigationRef } from "./navigation/navigationRef"
+import { joinRoom as svcJoin } from "./services/roomService"
+import { updateLocationPing } from "./services/profileService"
+import { getCurrentCoarseLocation } from "./lib/location"
 
 function useDeepLinkAuth() {
   useEffect(() => {
@@ -17,6 +21,29 @@ function useDeepLinkAuth() {
       // so "reset-password" lands in hostname, not path
       const segment = parsed.hostname ?? parsed.path ?? ""
       const isRecovery = segment === "reset-password"
+
+      // proximity://join/ABCDEF — auto-join the room
+      if (segment === "join") {
+        const roomCode = parsed.path?.replace(/^\//, "").toUpperCase()
+        if (roomCode && roomCode.length === 6) {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session) {
+            if (navigationRef.isReady()) {
+              navigationRef.reset({ index: 0, routes: [{ name: "Welcome" }] })
+            }
+            return
+          }
+          try {
+            await svcJoin(roomCode, session.user.id)
+          } catch {
+            // room not found — just navigate to main, user can join manually
+          }
+          if (navigationRef.isReady()) {
+            navigationRef.reset({ index: 0, routes: [{ name: "MainTabs" }] })
+          }
+        }
+        return
+      }
 
       // PKCE flow — Supabase redirects with ?code=XXX
       const code = parsed.queryParams?.code
@@ -71,8 +98,34 @@ function useDeepLinkAuth() {
   }, [])
 }
 
+function useBackgroundLocationRefresh() {
+  const bgTimestamp = useRef<number | null>(null)
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", async (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        bgTimestamp.current = Date.now()
+      } else if (nextState === "active" && bgTimestamp.current !== null) {
+        const elapsed = Date.now() - bgTimestamp.current
+        bgTimestamp.current = null
+        if (elapsed > 15 * 60 * 1000) {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session) {
+            const coords = await getCurrentCoarseLocation()
+            if (coords) {
+              updateLocationPing(session.user.id, coords.lat, coords.lng).catch(() => {})
+            }
+          }
+        }
+      }
+    })
+    return () => sub.remove()
+  }, [])
+}
+
 export default function App() {
   useDeepLinkAuth()
+  useBackgroundLocationRefresh()
 
   return (
     <UserProvider>

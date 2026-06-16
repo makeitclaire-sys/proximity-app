@@ -1,6 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
-import { getProfileById, updateProfile as saveProfileField, blockUser as svcBlockUser } from "../services/profileService"
+import {
+  getProfileById,
+  updateProfile as saveProfileField,
+  blockUser as svcBlockUser,
+  setAvailability as svcSetAvailability,
+  extendAvailability as svcExtendAvailability,
+} from "../services/profileService"
 import { supabase } from "../lib/supabase"
 
 export type UserProfile = {
@@ -16,6 +22,8 @@ export type UserProfile = {
   blockedIds: string[]
   supabaseId: string | null
   avatarUrl: string | null
+  isAvailable: boolean
+  availableUntil: string | null
 }
 
 type UserContextType = {
@@ -28,6 +36,8 @@ type UserContextType = {
   toggleVisibility: () => void
   unlockProMode: () => Promise<void>
   blockUser: (targetId: string) => Promise<void>
+  setAvailability: (isAvailable: boolean, lat?: number, lng?: number) => Promise<void>
+  extendAvailability: () => Promise<string>
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -43,6 +53,8 @@ const DEFAULT_PROFILE: UserProfile = {
   blockedIds: [],
   supabaseId: null,
   avatarUrl: null,
+  isAvailable: false,
+  availableUntil: null,
 }
 
 const UserContext = createContext<UserContextType | null>(null)
@@ -94,6 +106,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         hasProfessionalMode: person.hasProfessionalMode ?? false,
         blockedIds: person.blockedIds ?? [],
         avatarUrl: person.avatarUrl ?? null,
+        isAvailable: person.isAvailable ?? false,
+        availableUntil: person.availableUntil ?? null,
       }))
     } catch (err) {
       console.log("PROFILE LOAD ERROR:", err)
@@ -145,8 +159,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setProfile(prev => ({ ...prev, blockedIds: [...prev.blockedIds, targetId] }))
   }
 
+  const setAvailability = async (isAvailable: boolean, lat?: number, lng?: number) => {
+    if (!profile.supabaseId) return
+    await svcSetAvailability(profile.supabaseId, isAvailable, lat, lng)
+    const availableUntil = isAvailable
+      ? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+      : null
+    setProfile(prev => ({ ...prev, isAvailable, availableUntil }))
+  }
+
+  const extendAvailability = async () => {
+    if (!profile.supabaseId) return ""
+    const newUntil = await svcExtendAvailability(profile.supabaseId)
+    setProfile(prev => ({ ...prev, availableUntil: newUntil }))
+    return newUntil
+  }
+
   return (
-    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, setMode, toggleMode, toggleVisibility, unlockProMode, blockUser }}>
+    <UserContext.Provider value={{ profile, profileLoaded, updateProfile, refreshProfile, setMode, toggleMode, toggleVisibility, unlockProMode, blockUser, setAvailability, extendAvailability }}>
       {children}
     </UserContext.Provider>
   )

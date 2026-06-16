@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert, Image } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useNavigation } from "@react-navigation/native"
@@ -6,15 +7,56 @@ import { RootStackParamList } from "../navigation/RootNavigator"
 import { useUser } from "../context/UserContext"
 import { supabase } from "../lib/supabase"
 import { SOCIAL_COLOR, PRO_COLOR } from "../constants/modes"
+import { getCurrentCoarseLocation } from "../lib/location"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
 export default function MyProfileScreen() {
   const navigation = useNavigation<NavProp>()
-  const { profile, setMode, toggleVisibility } = useUser()
+  const { profile, setMode, toggleVisibility, setAvailability, extendAvailability } = useUser()
   const insets = useSafeAreaInsets()
   const accent = profile.mode === "professional" ? PRO_COLOR : SOCIAL_COLOR
   const initials = profile.name.split(" ").map(p => p[0]).join("")
+
+  const [togglingAvailable, setTogglingAvailable] = useState(false)
+  const [extending, setExtending] = useState(false)
+
+  const formatUntil = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase()
+
+  const handleToggleAvailable = async (value: boolean) => {
+    if (!value) {
+      try {
+        await setAvailability(false)
+      } catch {}
+      return
+    }
+    if (!profile.isVisible) {
+      Alert.alert("visibility off", "turn visibility on first.")
+      return
+    }
+    setTogglingAvailable(true)
+    try {
+      const coords = await getCurrentCoarseLocation()
+      if (!coords) {
+        Alert.alert("location needed", "we need location access to enable this.")
+        return
+      }
+      await setAvailability(true, coords.lat, coords.lng)
+    } catch (err) {
+      Alert.alert("error", err instanceof Error ? err.message : "please try again.")
+    } finally {
+      setTogglingAvailable(false)
+    }
+  }
+
+  const handleExtend = async () => {
+    setExtending(true)
+    try {
+      await extendAvailability()
+    } catch {}
+    setExtending(false)
+  }
 
   const handleLogout = () => {
     Alert.alert("Log out", "Are you sure you want to log out?", [
@@ -157,6 +199,44 @@ export default function MyProfileScreen() {
             />
           </View>
         </Pressable>
+
+        {/* I'm available */}
+        <View style={[
+          styles.visibilityCard,
+          { borderColor: profile.isAvailable ? "#D9F65C" : "#EEEBF2", opacity: profile.isVisible ? 1 : 0.5 },
+        ]}>
+          <View style={styles.visibilityRow}>
+            <View style={styles.visibilityTextGroup}>
+              {profile.isAvailable && profile.availableUntil ? (
+                <>
+                  <Text style={[styles.visibilityStatus, { color: "#8AB200" }]}>I'm available</Text>
+                  <Text style={styles.visibilityTagline}>
+                    {`available until ${formatUntil(profile.availableUntil)}.`}
+                  </Text>
+                  <Pressable onPress={handleExtend} disabled={extending} style={styles.extendButton}>
+                    <Text style={styles.extendText}>{extending ? "extending…" : "extend +4h"}</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.visibilityStatus, { color: "#A8A3B8" }]}>I'm available</Text>
+                  <Text style={styles.visibilityTagline}>
+                    {profile.isVisible
+                      ? "people nearby can see me for the next 4 hours."
+                      : "turn visibility on first."}
+                  </Text>
+                </>
+              )}
+            </View>
+            <Switch
+              value={profile.isAvailable}
+              onValueChange={handleToggleAvailable}
+              trackColor={{ false: "#EEEBF2", true: "#D9F65C" }}
+              thumbColor="#FFFFFF"
+              disabled={togglingAvailable || !profile.isVisible}
+            />
+          </View>
+        </View>
 
         <Pressable
           style={styles.primaryButton}
@@ -358,6 +438,14 @@ const styles = StyleSheet.create({
     color: "#4A4458",
   },
 
+  extendButton: {
+    marginTop: 4,
+  },
+  extendText: {
+    fontSize: 13,
+    color: "#8AB200",
+    fontWeight: "500",
+  },
   primaryButton: {
     backgroundColor: "#12101C",
     paddingVertical: 16,

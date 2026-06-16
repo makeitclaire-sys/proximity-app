@@ -20,6 +20,7 @@ export type RootStackParamList = {
   Paywall: undefined
   CreateRoom: undefined
   JoinRoom: undefined
+  RoomCode: { roomCode: string; roomName: string; accessMode: "private" | "open" }
 }
 
 export type TabParamList = {

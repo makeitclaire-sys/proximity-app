@@ -11,7 +11,7 @@ import {
   type RoomMember,
 } from "../services/roomService"
 
-type CreateRoomOpts = { isDiscoverable?: boolean; latitude?: number | null; longitude?: number | null }
+type CreateRoomOpts = { accessMode?: "private" | "open"; latitude?: number | null; longitude?: number | null }
 
 type RoomContextType = {
   room: Room | null

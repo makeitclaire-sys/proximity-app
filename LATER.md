@@ -80,6 +80,24 @@ CREATE POLICY "send to accepted contacts only" ON messages FOR INSERT
 
 ---
 
+## Mode toggle in Discover for cross-mode browsing (V2)
+
+Currently social users see social nearby people and pro users see pro. A user with both modes unlocked has to switch modes to browse the other list. V2 consideration: a combined view or a quick toggle in the people-nearby header.
+
+---
+
+## Map view of nearby rooms (V2)
+
+Show open rooms on a small map view in JoinRoomScreen instead of (or alongside) the list. Useful at large events.
+
+---
+
+## Auto-disable "I'm available" on app uninstall
+
+When a user uninstalls the app, their is_available flag stays true in the DB until available_until expires (max 4h). No fix needed for beta. For App Store: investigate push token revocation as a signal to clear availability, or add a server-side cron that sweeps expired rows.
+
+---
+
 ## Avatar bucket DELETE policy too permissive
 
 Current policy "Allow avatar deletes" lets any authenticated user delete any avatar in the bucket. Before App Store launch:

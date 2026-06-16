@@ -11,6 +11,10 @@ export type Person = {
   hasProfessionalMode?: boolean
   blockedIds?: string[]
   avatarUrl?: string
+  // availability
+  isAvailable?: boolean
+  availableUntil?: string | null
+  distanceMeters?: number
   // fields present in mock data but not required from Supabase
   status?: string
   distance?: string

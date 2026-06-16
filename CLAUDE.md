@@ -65,7 +65,12 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 | `email` | text | |
 | `status` | text | |
 | `mode` | text | "social" / "professional" |
-| `is_visible` | bool | |
+| `is_visible` | bool | master visibility switch — overrides is_available |
+| `is_available` | bool | default false — opt-in nearby presence, expires after 4h |
+| `available_until` | timestamptz | nullable — set to now()+4h on toggle-on |
+| `last_known_latitude` | float8 | nullable |
+| `last_known_longitude` | float8 | nullable |
+| `last_location_at` | timestamptz | nullable — coords older than 30 min are ignored |
 | `has_pro_mode` | bool | default false |
 | `interests` | text[] | |
 | `talk_topics` | text[] | |
@@ -108,9 +113,10 @@ Index: `(sender_id, receiver_id, created_at)`. In realtime publication.
 | `created_at` | timestamptz | |
 | `ends_at` | timestamptz | nullable |
 | `closed_at` | timestamptz | nullable |
-| `is_discoverable` | bool | default false — opt-in per room |
-| `latitude` | float8 | nullable — only set when discoverable |
-| `longitude` | float8 | nullable — only set when discoverable |
+| `access_mode` | text | "private" / "open", default "private" |
+| `is_discoverable` | bool | derived: true when access_mode = "open". kept for backward compat |
+| `latitude` | float8 | nullable — only set for open rooms |
+| `longitude` | float8 | nullable — only set for open rooms |
 
 ### `room_members`
 | Column | Type | Notes |
@@ -154,17 +160,17 @@ context/
   RoomContext.tsx               — current room, useRoom()
 
 services/
-  profileService.ts             — getProfiles, getProfileById, createProfile, updateProfile, uploadAvatar, getEmailByUsername
+  profileService.ts             — getProfiles, getProfileById, createProfile, updateProfile, uploadAvatar, getEmailByUsername, setAvailability, extendAvailability, updateLocationPing, getNearbyAvailablePeople
   connectionService.ts          — createConnection, getConnections, getConnectionWith, updateConnectionStatus
   messageService.ts             — sendMessage, getMessages, subscribeToConversation
-  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers, setRoomDiscoverable, getNearbyDiscoverableRooms
+  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers, getNearbyOpenRooms, getNearbyDiscoverableRooms (legacy alias)
 
 screens/
   Welcome, Signup, Login, LoginCode, EmailVerify, PasswordSetup    (auth flow)
   Username, Birthday, Selfie, ModePicker, Basics, Done             (signup steps)
   Discover, Connections, Messages, MyProfile                       (main tabs)
   ProfileDetail, EditProfile, Chat, Paywall                        (overlays)
-  CreateRoom, JoinRoom                                             (room entry)
+  CreateRoom, JoinRoom, RoomCode                                   (room entry + QR share)
 
 constants/
   modes.ts                      — SOCIAL_COLOR, PRO_COLOR
@@ -227,4 +233,4 @@ At the end of every working session:
 
 ---
 
-*Last updated: Day 12 continued. Photo upload fixed: replaced XHR arraybuffer with expo-file-system + base64-arraybuffer + expo-image-manipulator (fixes Android content:// URIs). expo-location removed to fix "App not installed" on Android 12 — location.ts stubbed, discoverable rooms fall back to code-only. Password reset deep link fixed (hostname detection + hash token fallback). Next: rebuild APK, verify photo upload + password reset on device, two-device test, then TestFlight.*
+*Last updated: Day 12 pivot. Discovery pivot landed — nearby people layer + private/open rooms + QR. Discover now shows nearby available people as primary (rooms secondary). "I'm available" opt-in with 4h expiry in MyProfile + Discover. Rooms: access_mode replaces is_discoverable toggle (private=code-only, open=visible+one-tap join). RoomCodeScreen with QR (react-native-qrcode-svg). JoinRoom has QR scanner via expo-camera. proximity://join/{CODE} deep link auto-joins. AppState handler refreshes location on foreground after 15min background. SQL migrations need running in Supabase (profiles + rooms). expo-location still stubbed — nearby feature wired but location returns null until re-added. Next: run SQL migrations, rebuild APK, two-device test.*
