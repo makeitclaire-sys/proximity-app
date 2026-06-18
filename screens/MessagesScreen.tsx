@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react"
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image } from "react-native"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Image } from "react-native"
+import { Skeleton } from "../components/Skeleton"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
@@ -120,7 +121,17 @@ export default function MessagesScreen() {
         </Text>
 
         {loading ? (
-          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+          <View style={styles.list}>
+            {[1, 2, 3].map(i => (
+              <View key={i} style={[styles.card, styles.skeletonCard]}>
+                <Skeleton width={46} height={46} borderRadius={23} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Skeleton width="55%" height={14} borderRadius={6} />
+                  <Skeleton width="75%" height={12} borderRadius={6} />
+                </View>
+              </View>
+            ))}
+          </View>
         ) : conversations.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💬</Text>
@@ -195,8 +206,8 @@ const styles = StyleSheet.create({
     color: "#12101C",
     marginTop: -8,
   },
-  loader: {
-    marginTop: 60,
+  skeletonCard: {
+    overflow: "hidden",
   },
   list: {
     gap: 10,

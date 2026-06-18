@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert, Image } from "react-native"
+import { haptic } from "../lib/haptics"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -26,6 +27,7 @@ export default function MyProfileScreen() {
 
   const handleToggleAvailable = async (value: boolean) => {
     if (!value) {
+      haptic.light()
       try {
         await setAvailability(false)
       } catch {}
@@ -43,7 +45,9 @@ export default function MyProfileScreen() {
         return
       }
       await setAvailability(true, coords.lat, coords.lng)
+      haptic.success()
     } catch (err) {
+      haptic.error()
       Alert.alert("error", err instanceof Error ? err.message : "please try again.")
     } finally {
       setTogglingAvailable(false)
@@ -54,6 +58,7 @@ export default function MyProfileScreen() {
     setExtending(true)
     try {
       await extendAvailability()
+      haptic.light()
     } catch {}
     setExtending(false)
   }

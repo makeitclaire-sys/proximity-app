@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, Alert } from 'react-native'
+import { haptic } from '../lib/haptics'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigation/RootNavigator'
@@ -61,6 +62,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const handleSendHi = () => {
     if (myId == null) return
+    haptic.medium()
     setConnection({ id: "", senderId: myId, receiverId: person.id, type: "hi", status: "pending", mode: myProfile.mode, createdAt: "" })
     createConnection(myId, person.id, "hi", myProfile.mode).catch(() => {
       setConnection(null)
@@ -69,6 +71,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const handleSendChat = () => {
     if (myId == null) return
+    haptic.medium()
     setConnection({ id: "", senderId: myId, receiverId: person.id, type: "chat", status: "pending", mode: myProfile.mode, createdAt: "" })
     createConnection(myId, person.id, "chat", myProfile.mode).catch(() => {
       setConnection(null)
@@ -79,6 +82,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const handleBlock = () => {
     Alert.alert(`Block ${person.name}?`, "They won't appear in your Discover.", [
       { text: "Block", style: "destructive", onPress: async () => {
+        haptic.medium()
         await blockUser(person.id)
         navigation.goBack()
       }},
@@ -97,6 +101,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const doReport = async (reason: string) => {
     if (!myId) return
+    haptic.medium()
     await reportUser(myId, person.id, reason)
     Alert.alert("Reported", "Thanks for letting us know.")
   }

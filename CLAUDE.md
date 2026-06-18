@@ -25,6 +25,8 @@ Brand symbol: `outputs/proximity_symbol.svg`.
 | Image picker | expo-image-picker 17 |
 | Camera | expo-camera 17 |
 | Deep links | expo-linking |
+| Haptics | expo-haptics |
+| QR code | react-native-qrcode-svg |
 
 Repo: https://github.com/makeitclaire-sys/proximity-app
 
@@ -39,7 +41,7 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 | 3. Minimal rooms | 5–7 | ✅ Complete — schema, service layer, CreateRoom + JoinRoom screens, Discover gate, room-scoped filtering, leave-room flow |
 | 4. Block/report + polish | 8–9 | ✅ Complete — block user, report user, blocked filter in Discover, room code shown after CreateRoom |
 | 5. TestFlight build #1 | 10–11 | ✅ Complete — group chat + Android APK shipped (build 969a3fed), logo SVG component |
-| 6. Iterate + TestFlight #2 | 12–14 | 🔧 In progress — discoverable rooms with coarse location |
+| 6. Iterate + TestFlight #2 | 12–14 | 🔧 In progress — polish features shipped, need SQL migration + new build |
 
 ## What's built end-to-end
 
@@ -52,6 +54,8 @@ Target: TestFlight beta with 10–20 testers in 14 days. Cadence: 4–6 hrs/day.
 - **Visibility.** Toggle in MyProfile writes `profiles.is_visible`. Discover filters out invisible users.
 - **Rooms (data layer).** `rooms` and `room_members` tables exist with RLS. `roomService.ts` has createRoom, joinRoom, leaveRoom, closeRoom, getCurrentRoom, getRoomMembers. `RoomContext` exposes `useRoom()`.
 - **Rooms (UI — Days 6–7).** `CreateRoomScreen` and `JoinRoomScreen` wired into `RootNavigator`. Discover gates on `useRoom().room`: no room → "Create a room" / "Join with a code" empty state; in a room → room banner (name + live dot + Leave button) + people list filtered to current room members only (`memberIds.has(p.id)`). Leaving resets context and snaps back to the gate automatically.
+- **Discovery pivot (Day 12).** "I'm available" opt-in presence (4h auto-expiry, 200m Haversine filter). `RoomCodeScreen` with QR code. QR scanner in JoinRoom. `proximity://join/{CODE}` deep link. Private/open room access modes.
+- **Polish (Day 12+).** Typing indicators upgraded to Realtime Presence (auto-clears on disconnect). Message reactions — long-press bubble → emoji picker (❤️ 👍 😂 😮 🙏), realtime sync. Skeleton loaders in MessagesScreen + ConnectionsScreen. Haptics throughout (send, accept, decline, say hi, availability toggle, pull-to-refresh, reactions).
 
 ## Database schema
 
@@ -129,6 +133,17 @@ Index: `(sender_id, receiver_id, created_at)`. In realtime publication.
 
 Unique: `(room_id, user_id)`. Active members: `WHERE left_at IS NULL`.
 
+### `message_reactions`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `message_id` | uuid | FK → messages.id ON DELETE CASCADE |
+| `user_id` | uuid | FK → profiles.id ON DELETE CASCADE |
+| `emoji` | text | check in ('heart','thumbsup','laugh','wow','pray') |
+| `created_at` | timestamptz | default now() |
+
+Unique: `(message_id, user_id)` — one reaction per user per message. In realtime publication. **Requires SQL migration before first build with reactions.**
+
 ### RLS posture
 
 - All tables have RLS enabled.
@@ -163,7 +178,15 @@ services/
   profileService.ts             — getProfiles, getProfileById, createProfile, updateProfile, uploadAvatar, getEmailByUsername, setAvailability, extendAvailability, updateLocationPing, getNearbyAvailablePeople
   connectionService.ts          — createConnection, getConnections, getConnectionWith, updateConnectionStatus
   messageService.ts             — sendMessage, getMessages, subscribeToConversation
-  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers, getNearbyOpenRooms, getNearbyDiscoverableRooms (legacy alias)
+  roomService.ts                — createRoom, joinRoom, leaveRoom, getCurrentRoom, getRoomMembers, getNearbyOpenRooms
+  reactionService.ts            — getReactions, toggleReaction, subscribeToReactions; EmojiKey, EMOJI_DISPLAY, EMOJI_OPTIONS
+
+lib/
+  haptics.ts                    — haptic.light/medium/heavy/selection/success/error (expo-haptics wrapper)
+
+components/
+  ProximityLogo.tsx             — brand SVG
+  Skeleton.tsx                  — reanimated opacity-pulse skeleton block
 
 screens/
   Welcome, Signup, Login, LoginCode, EmailVerify, PasswordSetup    (auth flow)
@@ -233,4 +256,23 @@ At the end of every working session:
 
 ---
 
-*Last updated: Day 12 pivot. Discovery pivot landed — nearby people layer + private/open rooms + QR. Discover now shows nearby available people as primary (rooms secondary). "I'm available" opt-in with 4h expiry in MyProfile + Discover. Rooms: access_mode replaces is_discoverable toggle (private=code-only, open=visible+one-tap join). RoomCodeScreen with QR (react-native-qrcode-svg). JoinRoom has QR scanner via expo-camera. proximity://join/{CODE} deep link auto-joins. AppState handler refreshes location on foreground after 15min background. SQL migrations run ✅ (profiles availability columns + rooms access_mode). expo-location still stubbed — nearby feature wired but location returns null until re-added. Next: rebuild APK, two-device test.*
+*Last updated: Day 12 polish. Four polish features shipped: typing indicators upgraded to Realtime Presence (auto-clears on disconnect); message reactions with long-press picker + realtime sync; skeleton loaders in MessagesScreen + ConnectionsScreen; haptics throughout. SQL migration required for message_reactions table before rebuild — see spec below. Next: run SQL migration, rebuild APK, two-device test (reactions on both devices, typing presence clears when app backgrounds).*
+
+**SQL migration to run in Supabase Dashboard before next build:**
+```sql
+create table if not exists public.message_reactions (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references messages(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  emoji text not null check (emoji in ('heart','thumbsup','laugh','wow','pray')),
+  created_at timestamptz not null default now(),
+  unique (message_id, user_id)
+);
+create index if not exists message_reactions_message_idx on message_reactions (message_id);
+alter table public.message_reactions enable row level security;
+create policy "read my message reactions" on public.message_reactions
+  for select using (exists (select 1 from messages m where m.id = message_id and (m.sender_id = auth.uid() or m.receiver_id = auth.uid())));
+create policy "manage own message reactions" on public.message_reactions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+alter publication supabase_realtime add table public.message_reactions;
+```

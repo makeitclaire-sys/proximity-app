@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  Modal,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -18,6 +19,16 @@ import { useUser } from "../context/UserContext"
 import { getConnectionWith, type Connection } from "../services/connectionService"
 import { getMessages, sendMessage, type Message } from "../services/messageService"
 import { supabase } from "../lib/supabase"
+import {
+  getReactions,
+  toggleReaction,
+  subscribeToReactions,
+  type Reaction,
+  type EmojiKey,
+  EMOJI_OPTIONS,
+  EMOJI_DISPLAY,
+} from "../services/reactionService"
+import { haptic } from "../lib/haptics"
 
 type Props = NativeStackScreenProps<RootStackParamList, "Chat">
 
@@ -43,8 +54,22 @@ function sameDay(a: string, b: string): boolean {
     da.getDate() === db.getDate()
 }
 
+function groupReactions(reactions: Reaction[], messageId: string, myId: string) {
+  const forMsg = reactions.filter(r => r.messageId === messageId)
+  const counts = new Map<EmojiKey, { count: number; mine: boolean }>()
+  for (const r of forMsg) {
+    const prev = counts.get(r.emoji) ?? { count: 0, mine: false }
+    counts.set(r.emoji, { count: prev.count + 1, mine: prev.mine || r.userId === myId })
+  }
+  return Array.from(counts.entries()).map(([emoji, data]) => ({ emoji, ...data }))
+}
+
 function TypingIndicator() {
-  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current]
+  const dots = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ]
 
   useEffect(() => {
     const animations = dots.map((dot, i) =>
@@ -94,9 +119,19 @@ export default function ChatScreen({ navigation, route }: Props) {
   const [inputText, setInputText] = useState("")
   const [sending, setSending] = useState(false)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
+  const [reactions, setReactions] = useState<Reaction[]>([])
+  const [pickerVisible, setPickerVisible] = useState(false)
+  const [pickerMessageId, setPickerMessageId] = useState<string | null>(null)
+
   const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const messagesRef = useRef<Message[]>([])
 
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // Load initial connection + messages + reactions
   useEffect(() => {
     if (myId == null) {
       setConnection(null)
@@ -111,6 +146,10 @@ export default function ChatScreen({ navigation, route }: Props) {
       .then(([conn, msgs]) => {
         setConnection(conn)
         setMessages(msgs)
+        const realIds = msgs.map(m => m.id).filter(id => !id.startsWith("optimistic"))
+        if (realIds.length > 0) {
+          getReactions(realIds).then(setReactions).catch(() => {})
+        }
       })
       .catch(err => {
         console.error("[ChatScreen] load error:", err)
@@ -119,7 +158,7 @@ export default function ChatScreen({ navigation, route }: Props) {
       .finally(() => setLoading(false))
   }, [myId, personId])
 
-  // Realtime subscription — fires for every INSERT on messages involving this conversation
+  // Realtime messages subscription
   useEffect(() => {
     if (myId == null) return
 
@@ -132,13 +171,10 @@ export default function ChatScreen({ navigation, route }: Props) {
           const row = payload.new as Record<string, unknown>
           const senderId = row.sender_id as string
           const receiverId = row.receiver_id as string
-
-          // Ignore messages outside this conversation
           const inConversation =
             (senderId === myId && receiverId === personId) ||
             (senderId === personId && receiverId === myId)
           if (!inConversation) return
-
           const msg: Message = {
             id: row.id as string,
             senderId,
@@ -146,9 +182,7 @@ export default function ChatScreen({ navigation, route }: Props) {
             text: row.text as string,
             createdAt: row.created_at as string,
           }
-
           setMessages(prev => {
-            // Deduplicate: real message may already be in state from sendMessage() response
             if (prev.some(m => m.id === msg.id)) return prev
             return [...prev, msg]
           })
@@ -157,21 +191,46 @@ export default function ChatScreen({ navigation, route }: Props) {
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [myId, personId])
 
-  // Typing broadcast — both sides join the same channel via sorted IDs
+  // Realtime reactions subscription
+  useEffect(() => {
+    if (myId == null) return
+    const key = [myId, personId].sort().join("-")
+    return subscribeToReactions(key, {
+      onInsert: (r) => {
+        if (!messagesRef.current.some(m => m.id === r.messageId)) return
+        setReactions(prev => (prev.some(p => p.id === r.id) ? prev : [...prev, r]))
+      },
+      onDelete: (id) => {
+        setReactions(prev => prev.filter(r => r.id !== id))
+      },
+      onUpdate: (r) => {
+        if (!messagesRef.current.some(m => m.id === r.messageId)) return
+        setReactions(prev => [...prev.filter(p => p.id !== r.id), r])
+      },
+    })
+  }, [myId, personId])
+
+  // Typing — Presence-based (auto-clears on disconnect unlike Broadcast)
   useEffect(() => {
     if (!myId) return
-    const name = `typing-${[myId, personId].sort().join("-")}`
+    const chName = `typing-${[myId, personId].sort().join("-")}`
     const ch = supabase
-      .channel(name)
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        if (payload.userId === personId) setIsOtherTyping(payload.isTyping)
+      .channel(chName, { config: { presence: { key: myId } } })
+      .on("presence", { event: "sync" }, () => {
+        const state = ch.presenceState<{ isTyping: boolean }>()
+        const otherTyping = Object.entries(state)
+          .filter(([key]) => key !== myId)
+          .some(([, presences]) => presences.some(p => p.isTyping))
+        setIsOtherTyping(otherTyping)
       })
-      .subscribe()
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await ch.track({ isTyping: false })
+        }
+      })
     typingChannelRef.current = ch
     return () => {
       supabase.removeChannel(ch)
@@ -183,10 +242,10 @@ export default function ChatScreen({ navigation, route }: Props) {
   const handleTyping = (text: string) => {
     setInputText(text)
     if (!myId || !typingChannelRef.current) return
-    typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: true } })
+    typingChannelRef.current.track({ isTyping: true })
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     typingTimeoutRef.current = setTimeout(() => {
-      typingChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: false } })
+      typingChannelRef.current?.track({ isTyping: false })
     }, 2000)
   }
 
@@ -205,7 +264,8 @@ export default function ChatScreen({ navigation, route }: Props) {
     if (!trimmed || !canChat || myId == null || sending) return
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-    typingChannelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: myId, isTyping: false } })
+    typingChannelRef.current?.track({ isTyping: false })
+    haptic.light()
 
     setInputText("")
     setSending(true)
@@ -222,8 +282,6 @@ export default function ChatScreen({ navigation, route }: Props) {
 
     try {
       const saved = await sendMessage(myId, personId, trimmed)
-      // Realtime may have already added the real message before this resolves.
-      // Remove the optimistic entry; add the real one only if not already present.
       setMessages(prev => {
         const withoutOptimistic = prev.filter(m => m.id !== optimistic.id)
         if (withoutOptimistic.some(m => m.id === saved.id)) return withoutOptimistic
@@ -236,6 +294,23 @@ export default function ChatScreen({ navigation, route }: Props) {
     } finally {
       setSending(false)
     }
+  }
+
+  const handleLongPress = (msgId: string) => {
+    if (msgId.startsWith("optimistic")) return
+    haptic.medium()
+    setPickerMessageId(msgId)
+    setPickerVisible(true)
+  }
+
+  const handlePickEmoji = async (messageId: string, emoji: EmojiKey) => {
+    if (!myId) return
+    setPickerVisible(false)
+    setPickerMessageId(null)
+    haptic.selection()
+    try {
+      await toggleReaction(messageId, myId, emoji)
+    } catch {}
   }
 
   return (
@@ -298,12 +373,17 @@ export default function ChatScreen({ navigation, route }: Props) {
                 const fromMe = msg.senderId === myId
                 const prev = messages[i - 1]
                 const showDateSep = !prev || !sameDay(prev.createdAt, msg.createdAt)
+                const msgReactions = groupReactions(reactions, msg.id, myId ?? "")
                 return (
                   <View key={msg.id}>
                     {showDateSep && (
                       <Text style={styles.dayLabel}>{formatDateLabel(msg.createdAt)}</Text>
                     )}
-                    <View style={[styles.bubbleRow, fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}>
+                    <Pressable
+                      onLongPress={() => handleLongPress(msg.id)}
+                      delayLongPress={400}
+                      style={[styles.bubbleRow, fromMe ? styles.bubbleRowMe : styles.bubbleRowThem]}
+                    >
                       <View style={[styles.bubble, fromMe ? styles.bubbleMe : styles.bubbleThem]}>
                         <Text style={[styles.bubbleText, fromMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
                           {msg.text}
@@ -312,7 +392,23 @@ export default function ChatScreen({ navigation, route }: Props) {
                           {formatTime(msg.createdAt)}
                         </Text>
                       </View>
-                    </View>
+                      {msgReactions.length > 0 && (
+                        <View style={styles.reactionRow}>
+                          {msgReactions.map(r => (
+                            <Pressable
+                              key={r.emoji}
+                              style={[styles.reactionPill, r.mine && styles.reactionPillMine]}
+                              onPress={() => handlePickEmoji(msg.id, r.emoji)}
+                            >
+                              <Text style={styles.reactionEmoji}>{EMOJI_DISPLAY[r.emoji]}</Text>
+                              {r.count > 1 && (
+                                <Text style={styles.reactionCount}>{r.count}</Text>
+                              )}
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                    </Pressable>
                   </View>
                 )
               })
@@ -345,6 +441,29 @@ export default function ChatScreen({ navigation, route }: Props) {
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setPickerVisible(false)}>
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerRow}>
+              {EMOJI_OPTIONS.map(emoji => (
+                <Pressable
+                  key={emoji}
+                  style={styles.pickerEmoji}
+                  onPress={() => pickerMessageId && handlePickEmoji(pickerMessageId, emoji)}
+                >
+                  <Text style={styles.pickerEmojiText}>{EMOJI_DISPLAY[emoji]}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -356,7 +475,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFB",
   },
 
-  // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -382,7 +500,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Pending banner
   pendingBanner: {
     backgroundColor: "rgba(255, 159, 28, 0.1)",
     paddingHorizontal: 16,
@@ -397,17 +514,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Loading
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  // Messages
-  messageList: {
-    flex: 1,
-  },
+  messageList: { flex: 1 },
   messageListContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -456,26 +569,75 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
-  bubbleTextMe: {
-    color: "#FFFFFF",
-  },
-  bubbleTextThem: {
-    color: "#12101C",
-  },
+  bubbleTextMe: { color: "#FFFFFF" },
+  bubbleTextThem: { color: "#12101C" },
   bubbleTime: {
     fontSize: 10,
     marginTop: 3,
     opacity: 0.65,
     alignSelf: "flex-end",
   },
-  bubbleTimeMe: {
-    color: "#FFFFFF",
+  bubbleTimeMe: { color: "#FFFFFF" },
+  bubbleTimeThem: { color: "#12101C" },
+
+  reactionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
   },
-  bubbleTimeThem: {
-    color: "#12101C",
+  reactionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EEEBF2",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 3,
+  },
+  reactionPillMine: {
+    borderColor: "#12101C",
+    backgroundColor: "#F4F3F7",
+  },
+  reactionEmoji: { fontSize: 14 },
+  reactionCount: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4A4458",
   },
 
-  // Input
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  pickerEmoji: {
+    width: 52,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 26,
+    backgroundColor: "#F4F3F7",
+  },
+  pickerEmojiText: { fontSize: 28 },
+
   inputSafeArea: {
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
@@ -498,9 +660,7 @@ const styles = StyleSheet.create({
     color: "#12101C",
     maxHeight: 120,
   },
-  inputDisabled: {
-    opacity: 0.5,
-  },
+  inputDisabled: { opacity: 0.5 },
   sendButton: {
     width: 40,
     height: 40,
@@ -509,9 +669,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sendButtonDisabled: {
-    backgroundColor: "#EEEBF2",
-  },
+  sendButtonDisabled: { backgroundColor: "#EEEBF2" },
   sendButtonText: {
     fontSize: 18,
     color: "#FFFFFF",

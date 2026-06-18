@@ -21,6 +21,7 @@ import { useRoom } from "../context/RoomContext"
 import { getNearbyAvailablePeople, updateLocationPing } from "../services/profileService"
 import { getCurrentCoarseLocation } from "../lib/location"
 import { SOCIAL_COLOR, PRO_COLOR } from "../constants/modes"
+import { haptic } from "../lib/haptics"
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>
 
@@ -125,6 +126,7 @@ export default function DiscoverScreen() {
   }
 
   const onPullRefresh = async () => {
+    haptic.light()
     setRefreshing(true)
     await refreshAll()
     setRefreshing(false)

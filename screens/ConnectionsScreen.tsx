@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
-import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image } from "react-native"
+import { SafeAreaView, View, Text, Pressable, ScrollView, StyleSheet, Image } from "react-native"
+import { Skeleton } from "../components/Skeleton"
+import { haptic } from "../lib/haptics"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { RootStackParamList } from "../navigation/RootNavigator"
@@ -58,6 +60,7 @@ export default function ConnectionsScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const accept = async (conn: Connection) => {
+    haptic.success()
     setConnections(prev =>
       prev.map(c => c.id === conn.id ? { ...c, status: "accepted" } : c)
     )
@@ -71,6 +74,7 @@ export default function ConnectionsScreen() {
   }
 
   const decline = async (conn: Connection) => {
+    haptic.light()
     setConnections(prev => prev.filter(c => c.id !== conn.id))
     try {
       await updateConnectionStatus(conn.id, "declined")
@@ -190,7 +194,19 @@ export default function ConnectionsScreen() {
         <Text style={styles.brand}>Proximity</Text>
 
         {loading ? (
-          <ActivityIndicator size="small" color="#12101C" style={styles.loader} />
+          <View style={styles.section}>
+            {[1, 2, 3].map(i => (
+              <View key={i} style={[styles.card, { overflow: "hidden" }]}>
+                <View style={styles.cardRow}>
+                  <Skeleton width={44} height={44} borderRadius={22} />
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <Skeleton width="50%" height={14} borderRadius={6} />
+                    <Skeleton width="35%" height={12} borderRadius={6} />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
         ) : isEmpty ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🤝</Text>
@@ -250,9 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: "#12101C",
-  },
-  loader: {
-    marginTop: 60,
   },
   section: {
     gap: 12,
